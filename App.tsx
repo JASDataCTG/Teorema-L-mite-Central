@@ -89,6 +89,7 @@ const App: React.FC = () => {
     <div className="min-h-screen text-slate-200 p-4 sm:p-6 lg:p-8">
       <header className="text-center mb-6">
         <h1 className="text-3xl sm:text-4xl font-bold text-sky-400">Simulador del Teorema del Límite Central</h1>
+        <h2 className="text-3xl sm:text-4xl font-bold text-sky-400">Desarrollado por: Ing. Jairo Acosta Solano</h2>
         <p className="max-w-3xl mx-auto mt-2 text-slate-400">
           Observa cómo la distribución de las medias muestrales se aproxima a una curva normal (forma de campana), independientemente de la distribución de la población.
         </p>
