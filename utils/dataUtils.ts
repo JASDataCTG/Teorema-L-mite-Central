@@ -18,6 +18,39 @@ export const calculateStdDev = (data: number[], mean: number): number => {
   return Math.sqrt(variance);
 };
 
+// --- Sample Size Calculation ---
+
+const Z_SCORES: { [key: number]: number } = {
+  90: 1.645,
+  95: 1.96,
+  99: 2.576,
+};
+
+export const calculateSampleSize = (
+  populationSize: number | null,
+  confidenceLevel: number,
+  marginOfError: number,
+  proportion: number
+): number => {
+  const z = Z_SCORES[confidenceLevel];
+  if (!z) return 0;
+
+  const p = proportion / 100;
+  const e = marginOfError / 100;
+
+  // Formula for infinite population
+  const n0 = (z * z * p * (1 - p)) / (e * e);
+
+  if (!populationSize || populationSize <= 0) {
+    return Math.ceil(n0);
+  }
+
+  // Formula adjustment for finite population
+  const n = n0 / (1 + (n0 - 1) / populationSize);
+
+  return Math.ceil(n);
+};
+
 
 // --- Data Generation ---
 

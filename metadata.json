@@ -1,5 +1,5 @@
 {
-  "name": "Simulador del Teorema del Límite Central",
-  "description": "Un simulador interactivo para visualizar y comprender el Teorema del Límite Central. Elige una distribución de población, establece un tamaño de muestra y extrae muestras para ver cómo la distribución de las medias muestrales se aproxima a una curva normal.",
+  "name": "Herramientas Estadísticas: TLC y Calculadora de Muestra",
+  "description": "Una suite interactiva que incluye un simulador del Teorema del Límite Central y una calculadora para determinar el tamaño de muestra probabilística para tus investigaciones.",
   "requestFramePermissions": []
 }
