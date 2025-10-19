@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { ResponsiveContainer, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Scatter, ZAxis } from 'recharts';
+import { ResponsiveContainer, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Scatter, ZAxis, AreaChart, Area } from 'recharts';
 import { calculateClassificationMetrics, generateNormalData, calculateAuc } from '../utils/dataUtils';
 import { InfoIcon } from './Icons';
 
@@ -25,17 +25,24 @@ const MetricDisplay: React.FC<MetricDisplayProps> = ({ label, value, tooltip }) 
 const ConfusionMatrix: React.FC = () => {
     const [actualPositives, setActualPositives] = useState(200);
     const [threshold, setThreshold] = useState(0.5);
+    
+    // Model simulation parameters
+    const [positiveMean, setPositiveMean] = useState(0.65);
+    const [positiveStdDev, setPositiveStdDev] = useState(0.15);
+    const [negativeMean, setNegativeMean] = useState(0.35);
+    const [negativeStdDev, setNegativeStdDev] = useState(0.15);
+
     const [simulatedScores, setSimulatedScores] = useState<{ score: number, isPositive: boolean }[]>([]);
     const [isAnimating, setIsAnimating] = useState(false);
     const animationFrameId = useRef<number | null>(null);
 
     useEffect(() => {
-        const negativeScores = generateNormalData(TOTAL_INSTANCES - actualPositives, 0.4, 0.15)
+        const negativeScores = generateNormalData(TOTAL_INSTANCES - actualPositives, negativeMean, negativeStdDev)
             .map(score => ({ score: Math.max(0, Math.min(1, score)), isPositive: false }));
-        const positiveScores = generateNormalData(actualPositives, 0.6, 0.15)
+        const positiveScores = generateNormalData(actualPositives, positiveMean, positiveStdDev)
             .map(score => ({ score: Math.max(0, Math.min(1, score)), isPositive: true }));
         setSimulatedScores([...negativeScores, ...positiveScores]);
-    }, [actualPositives]);
+    }, [actualPositives, positiveMean, positiveStdDev, negativeMean, negativeStdDev]);
 
     const confusionMatrixData = useMemo(() => {
         let tp = 0, fp = 0, fn = 0, tn = 0;
@@ -72,6 +79,33 @@ const ConfusionMatrix: React.FC = () => {
             points.push({ x: fp / negatives, y: tp / positives }); // x: FPR, y: TPR
         }
         return points.sort((a,b) => a.x - b.x);
+    }, [simulatedScores]);
+
+    const scoreDistributionData = useMemo(() => {
+        const posScores = simulatedScores.filter(s => s.isPositive).map(s => s.score);
+        const negScores = simulatedScores.filter(s => !s.isPositive).map(s => s.score);
+
+        const numBins = 30;
+        const binWidth = 1 / numBins;
+        const bins: { [key: string]: { name: string, positive: number, negative: number } } = {};
+
+        for (let i = 0; i < numBins; i++) {
+            const name = (i * binWidth).toFixed(2);
+            bins[name] = { name, positive: 0, negative: 0 };
+        }
+        
+        [posScores, negScores].forEach((scoreSet, index) => {
+            const key = index === 0 ? 'positive' : 'negative';
+            for (const score of scoreSet) {
+                const binIndex = Math.min(numBins - 1, Math.floor(score / binWidth));
+                const binName = (binIndex * binWidth).toFixed(2);
+                if (bins[binName]) {
+                    bins[binName][key]++;
+                }
+            }
+        });
+        
+        return Object.values(bins);
     }, [simulatedScores]);
 
     const auc = useMemo(() => calculateAuc(rocCurveData), [rocCurveData]);
@@ -118,7 +152,7 @@ const ConfusionMatrix: React.FC = () => {
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            <div className="lg:col-span-1 xl:col-span-1 bg-slate-800/50 p-4 lg:p-6 rounded-lg shadow-lg flex flex-col space-y-8 backdrop-blur-sm">
+            <div className="lg:col-span-1 xl:col-span-1 bg-slate-800/50 p-4 lg:p-6 rounded-lg shadow-lg flex flex-col space-y-6 backdrop-blur-sm">
                 <div>
                     <label htmlFor="prevalence" className="block text-sm font-medium text-sky-300 mb-2">Prevalencia (Positivos Reales)</label>
                     <div className="flex items-center space-x-4">
@@ -136,11 +170,62 @@ const ConfusionMatrix: React.FC = () => {
                         <span className="font-mono text-sky-400 w-20 text-center bg-slate-700 py-1 rounded-md">{threshold.toFixed(2)}</span>
                     </div>
                 </div>
-                <div>
-                    <button onClick={handleAnimateClick} className="w-full bg-indigo-600 text-white font-semibold py-2 px-3 rounded-md hover:bg-indigo-500 transition duration-200 disabled:bg-indigo-500 disabled:opacity-50">
-                        {isAnimating ? 'Detener Animación' : 'Animar Umbral'}
-                    </button>
+                 <button onClick={handleAnimateClick} className="w-full bg-indigo-600 text-white font-semibold py-2 px-3 rounded-md hover:bg-indigo-500 transition duration-200">
+                    {isAnimating ? 'Detener Animación' : 'Animar Umbral'}
+                 </button>
+
+                <div className="border-t border-slate-700 pt-6 space-y-6">
+                    <h4 className="text-base font-semibold text-sky-300">Parámetros del Modelo Simulado</h4>
+                    <div className="space-y-4">
+                        <p className="text-sm font-medium text-slate-300">Distribución de Scores (Clase Positiva)</p>
+                        <div>
+                            <label htmlFor="positiveMean" className="text-xs text-slate-400 mb-1 block">Media</label>
+                            <div className="flex items-center space-x-4">
+                                <input id="positiveMean" type="range" min="0" max="1" step="0.01" value={positiveMean} onChange={e => setPositiveMean(Number(e.target.value))} disabled={isAnimating} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
+                                <span className="font-mono text-sky-400 w-16 text-center bg-slate-700 py-1 rounded-md text-sm">{positiveMean.toFixed(2)}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label htmlFor="positiveStdDev" className="text-xs text-slate-400 mb-1 block">Desv. Estándar</label>
+                            <div className="flex items-center space-x-4">
+                                <input id="positiveStdDev" type="range" min="0.05" max="0.3" step="0.01" value={positiveStdDev} onChange={e => setPositiveStdDev(Number(e.target.value))} disabled={isAnimating} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
+                                <span className="font-mono text-sky-400 w-16 text-center bg-slate-700 py-1 rounded-md text-sm">{positiveStdDev.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                     <div className="space-y-4">
+                        <p className="text-sm font-medium text-slate-300">Distribución de Scores (Clase Negativa)</p>
+                         <div>
+                            <label htmlFor="negativeMean" className="text-xs text-slate-400 mb-1 block">Media</label>
+                            <div className="flex items-center space-x-4">
+                                <input id="negativeMean" type="range" min="0" max="1" step="0.01" value={negativeMean} onChange={e => setNegativeMean(Number(e.target.value))} disabled={isAnimating} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
+                                <span className="font-mono text-sky-400 w-16 text-center bg-slate-700 py-1 rounded-md text-sm">{negativeMean.toFixed(2)}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label htmlFor="negativeStdDev" className="text-xs text-slate-400 mb-1 block">Desv. Estándar</label>
+                            <div className="flex items-center space-x-4">
+                                <input id="negativeStdDev" type="range" min="0.05" max="0.3" step="0.01" value={negativeStdDev} onChange={e => setNegativeStdDev(Number(e.target.value))} disabled={isAnimating} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
+                                <span className="font-mono text-sky-400 w-16 text-center bg-slate-700 py-1 rounded-md text-sm">{negativeStdDev.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <div className="border-t border-slate-700 pt-6">
+                     <h4 className="text-base font-semibold text-sky-300 mb-2 text-center">Distribución de Scores</h4>
+                     <ResponsiveContainer width="100%" height={150}>
+                        <AreaChart data={scoreDistributionData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
+                           <XAxis dataKey="name" tick={{ fill: '#94a3b8' }} fontSize={10} interval={5} />
+                           <YAxis tick={{ fill: '#94a3b8' }} fontSize={10} />
+                           <Tooltip contentStyle={{ backgroundColor: 'rgba(30, 41, 59, 0.9)', borderColor: '#38bdf8' }} />
+                           <Area type="monotone" dataKey="negative" stackId="1" stroke="#f87171" fill="#f87171" fillOpacity={0.4} name="Negativos" />
+                           <Area type="monotone" dataKey="positive" stackId="1" stroke="#34d399" fill="#34d399" fillOpacity={0.4} name="Positivos" />
+                        </AreaChart>
+                     </ResponsiveContainer>
+                </div>
+
             </div>
 
             <div className="lg:col-span-2 xl:col-span-3 grid grid-cols-1 xl:grid-cols-2 gap-6">
