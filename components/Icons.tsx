@@ -18,3 +18,9 @@ export const CalculatorIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) =
         <path fillRule="evenodd" d="M13.28 3.47a.75.75 0 010 1.06L9.81 8l3.47 3.47a.75.75 0 11-1.06 1.06l-3.47-3.47-3.47 3.47a.75.75 0 01-1.06-1.06L7.69 8 4.22 4.53a.75.75 0 011.06-1.06L8.75 6.94l3.47-3.47a.75.75 0 011.06 0zM3.75 2A1.75 1.75 0 002 3.75v12.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0018 16.25V3.75A1.75 1.75 0 0016.25 2H3.75z" clipRule="evenodd" />
     </svg>
 );
+
+export const ConfusionMatrixIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" {...props}>
+        <path d="M1 5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H3a2 2 0 01-2-2V5zm2 0v5h5V5H3zm7 0v5h5V5h-5zM3 12v3h5v-3H3zm7 0v3h5v-3h-5z"/>
+    </svg>
+);

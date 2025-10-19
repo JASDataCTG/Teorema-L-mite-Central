@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import Simulator from './components/Simulator';
 import Calculator from './components/Calculator';
-import { ChartBarIcon, CalculatorIcon } from './components/Icons';
+import ConfusionMatrix from './components/ConfusionMatrix';
+import { ChartBarIcon, CalculatorIcon, ConfusionMatrixIcon } from './components/Icons';
 
-type View = 'simulator' | 'calculator';
+type View = 'simulator' | 'calculator' | 'confusionMatrix';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<View>('simulator');
@@ -14,16 +15,26 @@ const App: React.FC = () => {
       ? 'bg-slate-800/60 text-sky-400 border-b-2 border-sky-400'
       : 'bg-transparent text-slate-400 hover:bg-slate-800/30 hover:text-sky-400'}`;
 
+  const getDescription = () => {
+    switch(activeView) {
+      case 'simulator':
+        return 'Observa cómo la distribución de las medias muestrales se aproxima a una curva normal, independientemente de la distribución de la población.';
+      case 'calculator':
+        return 'Calcula el tamaño de muestra necesario para tu investigación con base en el tamaño de la población, nivel de confianza y margen de error.';
+      case 'confusionMatrix':
+          return 'Evalúa un modelo de clasificación ajustando la sensibilidad y especificidad para ver cómo cambian la matriz de confusión y las métricas clave.';
+      default:
+        return '';
+    }
+  }
+
   return (
     <div className="min-h-screen text-slate-200 p-4 sm:p-6 lg:p-8">
       <header className="text-center mb-6">
         <h1 className="text-3xl sm:text-4xl font-bold text-sky-400">Herramientas Estadísticas Interactivas</h1>
         <h2 className="text-lg sm:text-xl font-semibold text-sky-500 mt-1">Desarrollado por: Ing. Jairo Acosta Solano</h2>
         <p className="max-w-3xl mx-auto mt-2 text-slate-400">
-          {activeView === 'simulator' 
-            ? 'Observa cómo la distribución de las medias muestrales se aproxima a una curva normal, independientemente de la distribución de la población.'
-            : 'Calcula el tamaño de muestra necesario para tu investigación con base en el tamaño de la población, nivel de confianza y margen de error.'
-          }
+          {getDescription()}
         </p>
       </header>
 
@@ -37,11 +48,16 @@ const App: React.FC = () => {
             <CalculatorIcon className="h-5 w-5" />
             <span>Calculadora de Muestra</span>
           </button>
+           <button className={navButtonClasses('confusionMatrix')} onClick={() => setActiveView('confusionMatrix')}>
+            <ConfusionMatrixIcon className="h-5 w-5" />
+            <span>Matriz de Confusión</span>
+          </button>
         </nav>
 
         <main>
           {activeView === 'simulator' && <Simulator />}
           {activeView === 'calculator' && <Calculator />}
+          {activeView === 'confusionMatrix' && <ConfusionMatrix />}
         </main>
       </div>
     </div>

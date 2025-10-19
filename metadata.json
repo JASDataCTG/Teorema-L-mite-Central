@@ -1,5 +1,5 @@
 {
   "name": "Herramientas Estadísticas: TLC y Calculadora de Muestra",
-  "description": "Una suite interactiva que incluye un simulador del Teorema del Límite Central y una calculadora para determinar el tamaño de muestra probabilística para tus investigaciones.",
+  "description": "Una suite interactiva que incluye un simulador del Teorema del Límite Central, una calculadora de tamaño de muestra y un simulador de matriz de confusión para evaluar modelos de clasificación.",
   "requestFramePermissions": []
 }

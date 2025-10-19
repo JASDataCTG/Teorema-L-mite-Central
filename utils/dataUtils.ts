@@ -166,3 +166,37 @@ export const binDataForChart = (data: number[], numBins: number = 30): ChartData
     value: count,
   }));
 };
+
+
+// --- Classification Metrics ---
+
+export const calculateClassificationMetrics = (tp: number, fp: number, fn: number, tn: number) => {
+    const total = tp + fp + fn + tn;
+    if (total === 0) {
+        return {
+            accuracy: 0, precision: 0, recall: 0, specificity: 0, f1Score: 0, mcc: 0, prevalence: 0,
+        };
+    }
+
+    const accuracy = (tp + tn) / total;
+    const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
+    const recall = tp + fn > 0 ? tp / (tp + fn) : 0; // Sensitivity
+    const specificity = tn + fp > 0 ? tn / (tn + fp) : 0;
+    const f1Score = precision + recall > 0 ? 2 * (precision * recall) / (precision + recall) : 0;
+
+    const mccNumerator = (tp * tn) - (fp * fn);
+    const mccDenominator = Math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn));
+    const mcc = mccDenominator > 0 ? mccNumerator / mccDenominator : 0;
+
+    const prevalence = (tp + fn) / total;
+
+    return {
+        accuracy,
+        precision,
+        recall,
+        specificity,
+        f1Score,
+        mcc,
+        prevalence
+    };
+};
