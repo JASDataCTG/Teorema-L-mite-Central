@@ -1,4 +1,3 @@
-
 import { DistributionType } from '../types';
 import type { ChartDataItem } from '../types';
 
@@ -64,9 +63,9 @@ const generateNormalPair = (): [number, number] => {
   return [R * Math.cos(theta), R * Math.sin(theta)];
 };
 
-const generateNormalData = (count: number, mean: number, stdDev: number): number[] => {
+export const generateNormalData = (count: number, mean: number, stdDev: number): number[] => {
   const data = [];
-  for (let i = 0; i < count / 2; i++) {
+  for (let i = 0; i < Math.ceil(count / 2); i++) {
     const [z1, z2] = generateNormalPair();
     data.push(z1 * stdDev + mean);
     data.push(z2 * stdDev + mean);
@@ -96,8 +95,8 @@ const generateSkewedData = (count: number, min: number, max: number, skew: numbe
 };
 
 const generateBimodalData = (count: number, mean1: number, stdDev1: number, mean2: number, stdDev2: number): number[] => {
-    const data1 = generateNormalData(count/2, mean1, stdDev1);
-    const data2 = generateNormalData(count/2, mean2, stdDev2);
+    const data1 = generateNormalData(Math.ceil(count/2), mean1, stdDev1);
+    const data2 = generateNormalData(Math.floor(count/2), mean2, stdDev2);
     return [...data1, ...data2];
 }
 
@@ -199,4 +198,22 @@ export const calculateClassificationMetrics = (tp: number, fp: number, fn: numbe
         mcc,
         prevalence
     };
+};
+
+// --- ROC AUC Calculation ---
+export const calculateAuc = (rocPoints: { x: number; y: number }[]): number => {
+    if (rocPoints.length < 2) {
+        return 0;
+    }
+    // Assumes points are already sorted by x-value (FPR)
+    let area = 0;
+    for (let i = 1; i < rocPoints.length; i++) {
+        const p1 = rocPoints[i - 1];
+        const p2 = rocPoints[i];
+        const height = (p1.y + p2.y) / 2;
+        const width = p2.x - p1.x;
+        area += height * width;
+    }
+
+    return area;
 };
