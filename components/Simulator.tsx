@@ -1,8 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import ControlPanel from './ControlPanel';
-import ChartCard from './ChartCard';
-import { DistributionType } from '../types';
-import type { ChartDataItem, Statistics } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { DistributionType, Statistics, ChartDataItem } from '../types';
 import {
   generatePopulation,
   drawSample,
@@ -10,20 +7,24 @@ import {
   calculateStdDev,
   binDataForChart,
 } from '../utils/dataUtils';
+import { ChartCard } from './ChartCard';
+import { ControlPanel } from './ControlPanel';
 
-const Simulator: React.FC = () => {
-  const [distribution, setDistribution] = useState<DistributionType>(DistributionType.Normal);
-  const [sampleSize, setSampleSize] = useState<number>(30);
-  const [population, setPopulation] = useState<number[]>([]);
-  const [sampleMeans, setSampleMeans] = useState<number[]>([]);
-  const [latestSample, setLatestSample] = useState<number[]>([]);
-  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+const StatCard: React.FC<{ title: string; stats: Statistics }> = ({ title, stats }) => (
+    <div className="bg-slate-800 p-4 rounded-lg shadow-lg">
+        <h4 className="text-lg font-semibold text-orange-500">{title}</h4>
+        <p className="text-2xl font-bold text-slate-100 mt-2">Media: {stats.mean.toFixed(2)}</p>
+        <p className="text-2xl font-bold text-slate-100">Desv. Estándar: {stats.stdDev.toFixed(2)}</p>
+    </div>
+);
 
-  useEffect(() => {
-    setPopulation(generatePopulation(distribution));
-    handleReset();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distribution]);
+
+export const Simulator: React.FC = () => {
+  const [distributionType, setDistributionType] = useState<DistributionType>(DistributionType.Normal);
+  const [sampleSize, setSampleSize] = useState<number>(100);
+  const [sample, setSample] = useState<number[]>([]);
+
+  const population = useMemo(() => generatePopulation(distributionType), [distributionType]);
 
   const populationStats = useMemo<Statistics>(() => {
     const mean = calculateMean(population);
@@ -31,96 +32,44 @@ const Simulator: React.FC = () => {
     return { mean, stdDev };
   }, [population]);
 
-  const latestSampleStats = useMemo<Statistics>(() => {
-    const mean = calculateMean(latestSample);
-    const stdDev = calculateStdDev(latestSample, mean);
+  const sampleStats = useMemo<Statistics>(() => {
+    if (sample.length === 0) return { mean: 0, stdDev: 0 };
+    const mean = calculateMean(sample);
+    const stdDev = calculateStdDev(sample, mean);
     return { mean, stdDev };
-  }, [latestSample]);
-
-  const sampleMeansStats = useMemo<Statistics & { count: number }>(() => {
-    const mean = calculateMean(sampleMeans);
-    const stdDev = calculateStdDev(sampleMeans, mean);
-    return { mean, stdDev, count: sampleMeans.length };
-  }, [sampleMeans]);
-
-  const populationChartData = useMemo<ChartDataItem[]>(() => binDataForChart(population), [population]);
-  const latestSampleChartData = useMemo<ChartDataItem[]>(() => binDataForChart(latestSample), [latestSample]);
-  const sampleMeansChartData = useMemo<ChartDataItem[]>(() => binDataForChart(sampleMeans), [sampleMeans]);
-
-  const handleReset = useCallback(() => {
-    setSampleMeans([]);
-    setLatestSample([]);
-  }, []);
+  }, [sample]);
   
-  const runSimulation = useCallback((count: number) => {
-    let newSampleMeans = [...sampleMeans];
-    let lastSample: number[] = [];
-
-    const step = (i: number) => {
-      if (i >= count) {
-        setSampleMeans(newSampleMeans);
-        setIsSimulating(false);
-        return;
-      }
-
-      const sample = drawSample(population, sampleSize);
-      const mean = calculateMean(sample);
-      newSampleMeans.push(mean);
-      lastSample = sample;
-
-      if (i % 50 === 0 || i === count - 1) { 
-        setLatestSample(lastSample);
-        setSampleMeans([...newSampleMeans]);
-      }
-      
-      requestAnimationFrame(() => step(i + 1));
-    };
-
-    step(0);
-  }, [population, sampleSize, sampleMeans]);
-
-  const handleDrawSamples = useCallback((count: number) => {
-    if (isSimulating || population.length === 0) return;
-    setIsSimulating(true);
-    runSimulation(count);
-  }, [isSimulating, population, runSimulation]);
+  const handleRedrawSample = () => {
+    setSample(drawSample(population, sampleSize));
+  };
   
+  useEffect(() => {
+    handleRedrawSample();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [population, sampleSize]);
+
+  const populationChartData = useMemo<ChartDataItem[]>(() => binDataForChart(population, 50), [population]);
+  const sampleChartData = useMemo<ChartDataItem[]>(() => binDataForChart(sample, 30), [sample]);
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      <div className="lg:col-span-1 xl:col-span-1">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="lg:col-span-1">
         <ControlPanel
-          distribution={distribution}
-          setDistribution={setDistribution}
+          distributionType={distributionType}
+          setDistributionType={setDistributionType}
           sampleSize={sampleSize}
           setSampleSize={setSampleSize}
-          onDrawSamples={handleDrawSamples}
-          onReset={handleReset}
-          isSimulating={isSimulating}
+          onRedrawSample={handleRedrawSample}
         />
+        <div className="mt-8 space-y-4">
+             <StatCard title="Estadísticas de la Población" stats={populationStats} />
+             <StatCard title="Estadísticas de la Muestra" stats={sampleStats} />
+        </div>
       </div>
-
-      <div className="lg:col-span-2 xl:col-span-3 grid grid-cols-1 md:grid-cols-1 xl:grid-cols-3 gap-6">
-        <ChartCard
-          title="Distribución de la Población"
-          data={populationChartData}
-          stats={populationStats}
-          barColor="#38bdf8"
-        />
-        <ChartCard
-          title="Última Muestra Tomada"
-          data={latestSampleChartData}
-          stats={latestSampleStats}
-          barColor="#a78bfa"
-        />
-        <ChartCard
-          title="Distribución de las Medias Muestrales"
-          data={sampleMeansChartData}
-          stats={sampleMeansStats}
-          barColor="#34d399"
-        />
+      <div className="lg:col-span-2 space-y-8">
+        <ChartCard title="Distribución de la Población" data={populationChartData} barColor="#14b8a6" />
+        <ChartCard title={`Distribución de la Muestra (n=${sampleSize})`} data={sampleChartData} barColor="#f97316" />
       </div>
     </div>
   );
 };
-
-export default Simulator;

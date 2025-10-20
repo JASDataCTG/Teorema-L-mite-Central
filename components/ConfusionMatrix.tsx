@@ -1,304 +1,274 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { ResponsiveContainer, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Scatter, ZAxis, AreaChart, Area } from 'recharts';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { calculateClassificationMetrics, generateNormalData, calculateAuc } from '../utils/dataUtils';
 import { InfoIcon } from './Icons';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, ReferenceLine, Dot } from 'recharts';
 
 const TOTAL_INSTANCES = 1000;
 
-interface MetricDisplayProps {
-    label: string;
-    value: string;
-    tooltip: string;
-}
+// Custom Dot for the active point on ROC curve
+const ActiveDot = (props: any) => {
+    const { cx, cy, stroke, payload, value } = props;
+    if (payload.isActive) {
+        return <Dot cx={cx} cy={cy} r={5} fill={stroke} stroke="#fff" strokeWidth={2} />;
+    }
+    return null;
+};
 
-const MetricDisplay: React.FC<MetricDisplayProps> = ({ label, value, tooltip }) => (
-    <div className="bg-slate-800/50 p-3 rounded-lg text-center relative group">
-        <span className="text-sm text-slate-400 block">{label}</span>
-        <span className="text-lg font-bold text-sky-400">{value}</span>
-        <div className="absolute bottom-full mb-2 w-56 p-2 bg-slate-900 text-slate-300 text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 pointer-events-none">
-            {tooltip}
+const MetricDisplay: React.FC<{ label: string; value: number | string; tooltip: string }> = ({ label, value, tooltip }) => (
+    <div className="bg-slate-700/50 p-3 rounded-lg flex justify-between items-center">
+        <div className="flex items-center">
+            <h4 className="font-semibold text-slate-300 text-sm">{label}</h4>
+            <div className="relative group ml-2">
+                <InfoIcon className="w-4 h-4 text-slate-400 cursor-pointer" />
+                <div className="absolute bottom-full mb-2 w-64 p-2 text-xs text-white bg-slate-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">
+                    {tooltip}
+                </div>
+            </div>
         </div>
+        <p className="text-xl font-bold text-teal-400">{typeof value === 'number' ? value.toFixed(3) : value}</p>
+    </div>
+);
+
+const SliderControl: React.FC<{label: string; value: number; min: number; max: number; step: number; onChange: (v:number)=>void}> = ({label, value, min, max, step, onChange}) => (
+    <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">
+            {label}: <span className="font-bold text-orange-400">{value.toFixed(2)}</span>
+        </label>
+        <input
+            type="range"
+            min={min} max={max} step={step} value={value}
+            onChange={e => onChange(Number(e.target.value))}
+            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+        />
     </div>
 );
 
 
-const ConfusionMatrix: React.FC = () => {
-    const [actualPositives, setActualPositives] = useState(200);
+export const ConfusionMatrix: React.FC = () => {
+    const [prevalence, setPrevalence] = useState(0.5);
     const [threshold, setThreshold] = useState(0.5);
     
-    // Model simulation parameters
-    const [positiveMean, setPositiveMean] = useState(0.65);
-    const [positiveStdDev, setPositiveStdDev] = useState(0.15);
-    const [negativeMean, setNegativeMean] = useState(0.35);
-    const [negativeStdDev, setNegativeStdDev] = useState(0.15);
+    const [posMean, setPosMean] = useState(0.65);
+    const [posStdDev, setPosStdDev] = useState(0.15);
+    const [negMean, setNegMean] = useState(0.35);
+    const [negStdDev, setNegStdDev] = useState(0.15);
 
-    const [simulatedScores, setSimulatedScores] = useState<{ score: number, isPositive: boolean }[]>([]);
     const [isAnimating, setIsAnimating] = useState(false);
-    const animationFrameId = useRef<number | null>(null);
+    const animationRef = useRef<number | null>(null);
 
-    useEffect(() => {
-        const negativeScores = generateNormalData(TOTAL_INSTANCES - actualPositives, negativeMean, negativeStdDev)
-            .map(score => ({ score: Math.max(0, Math.min(1, score)), isPositive: false }));
-        const positiveScores = generateNormalData(actualPositives, positiveMean, positiveStdDev)
-            .map(score => ({ score: Math.max(0, Math.min(1, score)), isPositive: true }));
-        setSimulatedScores([...negativeScores, ...positiveScores]);
-    }, [actualPositives, positiveMean, positiveStdDev, negativeMean, negativeStdDev]);
+    const scores = useMemo(() => {
+        const numPositive = Math.round(TOTAL_INSTANCES * prevalence);
+        const numNegative = TOTAL_INSTANCES - numPositive;
+        const positiveScores = generateNormalData(numPositive, posMean, posStdDev).map(s => Math.max(0, Math.min(1, s)));
+        const negativeScores = generateNormalData(numNegative, negMean, negStdDev).map(s => Math.max(0, Math.min(1, s)));
+        return [
+            ...positiveScores.map(score => ({ score, isPositive: true })),
+            ...negativeScores.map(score => ({ score, isPositive: false })),
+        ];
+    }, [prevalence, posMean, posStdDev, negMean, negStdDev]);
 
-    const confusionMatrixData = useMemo(() => {
+    const { tp, fp, fn, tn } = useMemo(() => {
         let tp = 0, fp = 0, fn = 0, tn = 0;
-        for (const item of simulatedScores) {
-            const predictedPositive = item.score >= threshold;
-            if (item.isPositive) {
-                if (predictedPositive) tp++;
-                else fn++;
-            } else {
-                if (predictedPositive) fp++;
-                else tn++;
-            }
-        }
-        const metrics = calculateClassificationMetrics(tp, fp, fn, tn);
-        return { tp, fp, fn, tn, metrics };
-    }, [simulatedScores, threshold]);
+        scores.forEach(({ score, isPositive }) => {
+            const predictedPositive = score >= threshold;
+            if (isPositive && predictedPositive) tp++;
+            else if (!isPositive && predictedPositive) fp++;
+            else if (isPositive && !predictedPositive) fn++;
+            else if (!isPositive && !predictedPositive) tn++;
+        });
+        return { tp, fp, fn, tn };
+    }, [scores, threshold]);
+    
+    const metrics = useMemo(() => {
+        return calculateClassificationMetrics(tp, fp, fn, tn);
+    }, [tp, fp, fn, tn]);
 
     const rocCurveData = useMemo(() => {
-        if (simulatedScores.length === 0) return [];
         const points = [];
-        const thresholds = Array.from({ length: 101 }, (_, i) => i / 100);
-        const positives = simulatedScores.filter(s => s.isPositive).length;
-        const negatives = simulatedScores.length - positives;
-        if (positives === 0 || negatives === 0) return [{x:0, y:0}, {x:1, y:1}];
-
-        for (const t of thresholds) {
-            let tp = 0, fp = 0;
-            for (const item of simulatedScores) {
-                if (item.score >= t) {
-                    if (item.isPositive) tp++;
-                    else fp++;
-                }
-            }
-            points.push({ x: fp / negatives, y: tp / positives }); // x: FPR, y: TPR
-        }
-        return points.sort((a,b) => a.x - b.x);
-    }, [simulatedScores]);
-
-    const scoreDistributionData = useMemo(() => {
-        const posScores = simulatedScores.filter(s => s.isPositive).map(s => s.score);
-        const negScores = simulatedScores.filter(s => !s.isPositive).map(s => s.score);
-
-        const numBins = 30;
-        const binWidth = 1 / numBins;
-        const bins: { [key: string]: { name: string, positive: number, negative: number } } = {};
-
-        for (let i = 0; i < numBins; i++) {
-            const name = (i * binWidth).toFixed(2);
-            bins[name] = { name, positive: 0, negative: 0 };
-        }
+        const numActualPositive = scores.filter(s => s.isPositive).length;
+        const numActualNegative = scores.length - numActualPositive;
         
-        [posScores, negScores].forEach((scoreSet, index) => {
-            const key = index === 0 ? 'positive' : 'negative';
-            for (const score of scoreSet) {
-                const binIndex = Math.min(numBins - 1, Math.floor(score / binWidth));
-                const binName = (binIndex * binWidth).toFixed(2);
-                if (bins[binName]) {
-                    bins[binName][key]++;
+        if (numActualPositive === 0 || numActualNegative === 0) return [{fpr: 0, tpr: 0, isActive: false}, {fpr: 1, tpr: 1, isActive: false}];
+
+        for (let t = 0; t <= 1.01; t += 0.01) {
+            let tp_roc = 0, fp_roc = 0;
+            scores.forEach(({ score, isPositive }) => {
+                if (score >= t) {
+                    if (isPositive) tp_roc++;
+                    else fp_roc++;
                 }
+            });
+            const tpr = tp_roc / numActualPositive;
+            const fpr = fp_roc / numActualNegative;
+            
+            const currentFpr = fp / numActualNegative;
+            const distance = Math.sqrt(Math.pow(fpr - currentFpr, 2));
+
+            points.push({ fpr, tpr, threshold: t, distance });
+        }
+
+        // Find the point on the curve closest to the current threshold's FPR
+        const activePointFpr = fp / numActualNegative;
+        let minDistance = Infinity;
+        let activeIndex = -1;
+
+        points.forEach((p, index) => {
+            const dist = Math.abs(p.fpr - activePointFpr);
+             if (dist < minDistance) {
+                minDistance = dist;
+                activeIndex = index;
             }
         });
+
+        // Add an exact point for the current threshold for precision
+        const currentTpr = numActualPositive > 0 ? tp / numActualPositive : 0;
+        const currentFpr = numActualNegative > 0 ? fp / numActualNegative : 0;
         
-        return Object.values(bins);
-    }, [simulatedScores]);
+        const finalPoints = [...points.map(p => ({...p, isActive: false})), {fpr: currentFpr, tpr: currentTpr, isActive: true, threshold: threshold}];
+        finalPoints.sort((a,b) => a.fpr - b.fpr);
 
-    const auc = useMemo(() => calculateAuc(rocCurveData), [rocCurveData]);
-    
-    const stopAnimation = useCallback(() => {
-        if (animationFrameId.current) {
-            cancelAnimationFrame(animationFrameId.current);
-            animationFrameId.current = null;
-        }
-        setIsAnimating(false);
-    }, []);
+        return [{fpr:0, tpr:0, isActive: false}, ...finalPoints, {fpr:1, tpr:1, isActive: false}].filter((v,i,a)=>a.findIndex(t=>(t.fpr === v.fpr && t.tpr === v.tpr))===i);
 
-    const runAnimation = useCallback(() => {
-        let start: number | null = null;
-        const duration = 3000;
-        const step = (timestamp: number) => {
-            if (!start) start = timestamp;
-            const progress = timestamp - start;
-            const percentage = Math.min(progress / duration, 1);
-            setThreshold(percentage);
-            if (progress < duration) {
-                animationFrameId.current = requestAnimationFrame(step);
-            } else {
-                stopAnimation();
-            }
-        };
-        animationFrameId.current = requestAnimationFrame(step);
-    }, [stopAnimation]);
-    
-    const handleAnimateClick = () => {
-        if (isAnimating) {
-            stopAnimation();
-        } else {
-            setIsAnimating(true);
-            runAnimation();
-        }
-    };
-    
+    }, [scores, threshold, tp, fp]);
+
+    const auc = useMemo(() => calculateAuc(rocCurveData.map(p => ({x: p.fpr, y: p.tpr}))), [rocCurveData]);
+
+    const scoreDistributionData = useMemo(() => {
+        const bins = Array.from({ length: 51 }, (_, i) => ({
+            name: (i * 0.02).toFixed(2),
+            positive: 0,
+            negative: 0,
+        }));
+        scores.forEach(({ score, isPositive }) => {
+            const index = Math.min(50, Math.floor(score / 0.02));
+            if (isPositive) bins[index].positive++;
+            else bins[index].negative++;
+        });
+        return bins;
+    }, [scores]);
+
     useEffect(() => {
-        return () => stopAnimation();
-    }, [stopAnimation]);
+        if (isAnimating) {
+            setThreshold(0);
+            animationRef.current = window.setInterval(() => {
+                setThreshold(prev => {
+                    if (prev >= 1) {
+                        clearInterval(animationRef.current!);
+                        setIsAnimating(false);
+                        return 1;
+                    }
+                    return prev + 0.01;
+                });
+            }, 50);
+        } else if (animationRef.current) {
+            clearInterval(animationRef.current);
+        }
+        return () => {
+            if (animationRef.current) clearInterval(animationRef.current);
+        };
+    }, [isAnimating]);
+
+    const MatrixCell: React.FC<{ label: string; value: number; bgColor: string; textColor: string; description: string }> = ({ label, value, bgColor, textColor, description }) => (
+        <div className={`${bgColor} ${textColor} p-4 rounded-lg text-center flex flex-col justify-center shadow-md min-h-[120px]`}>
+            <div className="font-semibold">{label}</div>
+            <div className="text-sm opacity-80 mb-1">{description}</div>
+            <div className="text-4xl font-bold mt-1">{value}</div>
+        </div>
+    );
     
-    const currentRocPoint = [{ x: 1 - confusionMatrixData.metrics.specificity, y: confusionMatrixData.metrics.recall }];
-
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            <div className="lg:col-span-1 xl:col-span-1 bg-slate-800/50 p-4 lg:p-6 rounded-lg shadow-lg flex flex-col space-y-6 backdrop-blur-sm">
-                <div>
-                    <label htmlFor="prevalence" className="block text-sm font-medium text-sky-300 mb-2">Prevalencia (Positivos Reales)</label>
-                    <div className="flex items-center space-x-4">
-                        <input id="prevalence" type="range" min="1" max={TOTAL_INSTANCES - 1} value={actualPositives} onChange={(e) => setActualPositives(Number(e.target.value))} disabled={isAnimating} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
-                        <span className="font-mono text-sky-400 w-20 text-center bg-slate-700 py-1 rounded-md">{actualPositives}</span>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
+            <div className="space-y-6">
+                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h2 className="text-2xl font-bold text-slate-100 mb-4">Controles del Modelo</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                        <SliderControl label="Prevalencia Clase (+)" value={prevalence} min={0.01} max={0.99} step={0.01} onChange={setPrevalence}/>
+                        <SliderControl label="Umbral Clasificación" value={threshold} min={0} max={1} step={0.01} onChange={setThreshold}/>
+                        <SliderControl label="Media Puntuación (+)" value={posMean} min={0} max={1} step={0.01} onChange={setPosMean}/>
+                        <SliderControl label="Desv. Est. Puntuación (+)" value={posStdDev} min={0.01} max={0.5} step={0.01} onChange={setPosStdDev}/>
+                        <SliderControl label="Media Puntuación (-)" value={negMean} min={0} max={1} step={0.01} onChange={setNegMean}/>
+                        <SliderControl label="Desv. Est. Puntuación (-)" value={negStdDev} min={0.01} max={0.5} step={0.01} onChange={setNegStdDev}/>
                     </div>
+                     <button
+                        onClick={() => setIsAnimating(prev => !prev)}
+                        className="w-full mt-6 bg-orange-500 text-white font-bold py-2.5 px-4 rounded-md hover:bg-orange-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-orange-500"
+                        >
+                        {isAnimating ? 'Detener Animación' : 'Animar Umbral'}
+                    </button>
                 </div>
-                <div>
-                    <label htmlFor="threshold" className="flex items-center space-x-2 text-sm font-medium text-sky-300 mb-2">
-                         <span>Umbral de Clasificación</span>
-                         <div className="group relative"><InfoIcon className="h-4 w-4 text-slate-400" /><div className="absolute bottom-full mb-2 w-64 p-2 bg-slate-900 text-slate-300 text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 pointer-events-none">Un modelo predice 'Positivo' si la probabilidad es &gt;= a este valor. Moverlo cambia el balance entre sensibilidad y especificidad.</div></div>
-                    </label>
-                    <div className="flex items-center space-x-4">
-                        <input id="threshold" type="range" min="0" max="1" step="0.01" value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} disabled={isAnimating} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
-                        <span className="font-mono text-sky-400 w-20 text-center bg-slate-700 py-1 rounded-md">{threshold.toFixed(2)}</span>
-                    </div>
-                </div>
-                 <button onClick={handleAnimateClick} className="w-full bg-indigo-600 text-white font-semibold py-2 px-3 rounded-md hover:bg-indigo-500 transition duration-200">
-                    {isAnimating ? 'Detener Animación' : 'Animar Umbral'}
-                 </button>
-
-                <div className="border-t border-slate-700 pt-6 space-y-6">
-                    <h4 className="text-base font-semibold text-sky-300">Parámetros del Modelo Simulado</h4>
-                    <div className="space-y-4">
-                        <p className="text-sm font-medium text-slate-300">Distribución de Scores (Clase Positiva)</p>
-                        <div>
-                            <label htmlFor="positiveMean" className="text-xs text-slate-400 mb-1 block">Media</label>
-                            <div className="flex items-center space-x-4">
-                                <input id="positiveMean" type="range" min="0" max="1" step="0.01" value={positiveMean} onChange={e => setPositiveMean(Number(e.target.value))} disabled={isAnimating} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
-                                <span className="font-mono text-sky-400 w-16 text-center bg-slate-700 py-1 rounded-md text-sm">{positiveMean.toFixed(2)}</span>
-                            </div>
-                        </div>
-                        <div>
-                            <label htmlFor="positiveStdDev" className="text-xs text-slate-400 mb-1 block">Desv. Estándar</label>
-                            <div className="flex items-center space-x-4">
-                                <input id="positiveStdDev" type="range" min="0.05" max="0.3" step="0.01" value={positiveStdDev} onChange={e => setPositiveStdDev(Number(e.target.value))} disabled={isAnimating} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
-                                <span className="font-mono text-sky-400 w-16 text-center bg-slate-700 py-1 rounded-md text-sm">{positiveStdDev.toFixed(2)}</span>
-                            </div>
-                        </div>
-                    </div>
-                     <div className="space-y-4">
-                        <p className="text-sm font-medium text-slate-300">Distribución de Scores (Clase Negativa)</p>
-                         <div>
-                            <label htmlFor="negativeMean" className="text-xs text-slate-400 mb-1 block">Media</label>
-                            <div className="flex items-center space-x-4">
-                                <input id="negativeMean" type="range" min="0" max="1" step="0.01" value={negativeMean} onChange={e => setNegativeMean(Number(e.target.value))} disabled={isAnimating} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
-                                <span className="font-mono text-sky-400 w-16 text-center bg-slate-700 py-1 rounded-md text-sm">{negativeMean.toFixed(2)}</span>
-                            </div>
-                        </div>
-                        <div>
-                            <label htmlFor="negativeStdDev" className="text-xs text-slate-400 mb-1 block">Desv. Estándar</label>
-                            <div className="flex items-center space-x-4">
-                                <input id="negativeStdDev" type="range" min="0.05" max="0.3" step="0.01" value={negativeStdDev} onChange={e => setNegativeStdDev(Number(e.target.value))} disabled={isAnimating} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
-                                <span className="font-mono text-sky-400 w-16 text-center bg-slate-700 py-1 rounded-md text-sm">{negativeStdDev.toFixed(2)}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="border-t border-slate-700 pt-6">
-                     <h4 className="text-base font-semibold text-sky-300 mb-2 text-center">Distribución de Scores</h4>
-                     <ResponsiveContainer width="100%" height={150}>
-                        <AreaChart data={scoreDistributionData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
-                           <XAxis dataKey="name" tick={{ fill: '#94a3b8' }} fontSize={10} interval={5} />
-                           <YAxis tick={{ fill: '#94a3b8' }} fontSize={10} />
-                           <Tooltip contentStyle={{ backgroundColor: 'rgba(30, 41, 59, 0.9)', borderColor: '#38bdf8' }} />
-                           <Area type="monotone" dataKey="negative" stackId="1" stroke="#f87171" fill="#f87171" fillOpacity={0.4} name="Negativos" />
-                           <Area type="monotone" dataKey="positive" stackId="1" stroke="#34d399" fill="#34d399" fillOpacity={0.4} name="Positivos" />
-                        </AreaChart>
+                <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h3 className="text-xl font-semibold mb-4 text-slate-100">Distribución de Puntuaciones</h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                         <AreaChart data={scoreDistributionData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                             <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                             <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} domain={[0, 1]} />
+                             <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                             <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }} />
+                             <Area type="monotone" dataKey="negative" stackId="1" stroke="#f87171" fill="#f87171" fillOpacity={0.6} name="Clase Negativa" />
+                             <Area type="monotone" dataKey="positive" stackId="1" stroke="#4ade80" fill="#4ade80" fillOpacity={0.6} name="Clase Positiva"/>
+                             <ReferenceLine x={threshold.toFixed(2)} stroke="white" strokeWidth={2} label={{ value: "Umbral", position: "insideBottom", fill: 'white' }} />
+                         </AreaChart>
                      </ResponsiveContainer>
                 </div>
 
-            </div>
+                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h2 className="text-xl font-semibold text-slate-100 mb-4">Matriz de Confusión</h2>
+                    <div className="relative pt-10 pl-10 mt-2">
+                        {/* Axis Labels */}
+                        <div className="absolute top-2 left-1/2 -translate-x-1/2 text-base font-semibold text-slate-300 tracking-wider">Predicho</div>
+                        <div className="absolute top-1/2 left-2 -translate-y-1/2 -rotate-90 text-base font-semibold text-slate-300 tracking-wider">Real</div>
 
-            <div className="lg:col-span-2 xl:col-span-3 grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <div className="flex flex-col gap-6">
-                    <div className="bg-slate-800/50 p-4 rounded-lg shadow-lg backdrop-blur-sm">
-                        <h3 className="text-lg font-bold text-sky-300 mb-4 text-center">Matriz de Confusión</h3>
-                        <div className="grid grid-cols-[auto_1fr_1fr] grid-rows-[auto_1fr_1fr] gap-2 text-center text-sm">
-                            <div />
-                            <div className="font-bold text-slate-400 p-2">Predicho Positivo</div>
-                            <div className="font-bold text-slate-400 p-2">Predicho Negativo</div>
+                        {/* The matrix grid itself */}
+                        <div className="grid grid-cols-[auto_1fr_1fr] grid-rows-[auto_1fr_1fr] gap-x-3 gap-y-3 items-stretch">
+                            {/* Column Labels */}
+                            <div></div> {/* Top-left corner */}
+                            <div className="text-center font-medium text-slate-400 pb-1">Positivo</div>
+                            <div className="text-center font-medium text-slate-400 pb-1">Negativo</div>
 
-                            <div className="font-bold text-slate-400 p-2 flex items-center justify-center">Real Positivo</div>
-                            <div className="bg-emerald-500/30 p-4 rounded"><span className="block text-xs text-emerald-300">Verdadero Positivo</span><span className="text-2xl font-bold">{confusionMatrixData.tp}</span></div>
-                            <div className="bg-red-500/30 p-4 rounded"><span className="block text-xs text-red-300">Falso Negativo</span><span className="text-2xl font-bold">{confusionMatrixData.fn}</span></div>
-                            
-                            <div className="font-bold text-slate-400 p-2 flex items-center justify-center">Real Negativo</div>
-                            <div className="bg-red-500/30 p-4 rounded"><span className="block text-xs text-red-300">Falso Positivo</span><span className="text-2xl font-bold">{confusionMatrixData.fp}</span></div>
-                            <div className="bg-emerald-500/30 p-4 rounded"><span className="block text-xs text-emerald-300">Verdadero Negativo</span><span className="text-2xl font-bold">{confusionMatrixData.tn}</span></div>
-                        </div>
-                    </div>
+                            {/* Row 1: Actual Positive */}
+                            <div className="flex items-center justify-end font-medium text-slate-400 pr-2">Positivo</div>
+                            <MatrixCell label="Verdadero Positivo (VP)" value={tp} bgColor="bg-teal-800" textColor="text-teal-100" description="Acierto Positivo" />
+                            <MatrixCell label="Falso Negativo (FN)" value={fn} bgColor="bg-orange-900" textColor="text-orange-100" description="Error Tipo II" />
 
-                    <div className="bg-slate-800/50 p-4 rounded-lg shadow-lg backdrop-blur-sm">
-                        <h3 className="text-lg font-bold text-sky-300 mb-4 text-center">Métricas de Clasificación</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                            <MetricDisplay label="Exactitud" value={`${(confusionMatrixData.metrics.accuracy * 100).toFixed(1)}%`} tooltip="Porcentaje de predicciones correctas del total ((TP+TN)/Total)." />
-                            <MetricDisplay label="Precisión" value={`${(confusionMatrixData.metrics.precision * 100).toFixed(1)}%`} tooltip="De todas las predicciones positivas, cuántas fueron correctas (TP/(TP+FP))." />
-                            <MetricDisplay label="Sensibilidad (Recall)" value={`${(confusionMatrixData.metrics.recall * 100).toFixed(1)}%`} tooltip="De todos los positivos reales, cuántos fueron identificados (TP/(TP+FN))." />
-                            <MetricDisplay label="Especificidad" value={`${(confusionMatrixData.metrics.specificity * 100).toFixed(1)}%`} tooltip="De todos los negativos reales, cuántos fueron identificados (TN/(TN+FP))." />
-                            <MetricDisplay label="F1-Score" value={confusionMatrixData.metrics.f1Score.toFixed(3)} tooltip="Media armónica de Precisión y Recall. Buen indicador del balance entre ambos." />
-                            <MetricDisplay label="MCC" value={confusionMatrixData.metrics.mcc.toFixed(3)} tooltip="Coef. de Correlación de Matthews. Métrica robusta que considera las 4 celdas de la matriz (-1 a +1)." />
+                            {/* Row 2: Actual Negative */}
+                            <div className="flex items-center justify-end font-medium text-slate-400 pr-2">Negativo</div>
+                            <MatrixCell label="Falso Positivo (FP)" value={fp} bgColor="bg-red-900" textColor="text-red-100" description="Error Tipo I" />
+                            <MatrixCell label="Verdadero Negativo (VN)" value={tn} bgColor="bg-teal-800" textColor="text-teal-100" description="Acierto Negativo" />
                         </div>
                     </div>
                 </div>
-
-                <div className="bg-slate-800/50 p-4 rounded-lg shadow-lg backdrop-blur-sm flex flex-col">
-                    <h3 className="text-lg font-bold text-sky-300 mb-2">Curva ROC y AUC</h3>
-                    <p className="text-center text-sm text-slate-400 mb-2">Área Bajo la Curva (AUC): <span className="font-bold text-lg text-amber-400">{auc.toFixed(3)}</span></p>
-                    <div className="flex-grow min-h-[300px]">
-                         <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart margin={{ top: 5, right: 20, left: 10, bottom: 20 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
-                                <XAxis 
-                                    type="number" 
-                                    dataKey="x" 
-                                    name="Tasa de Falsos Positivos (FPR)" 
-                                    domain={[0, 1]} 
-                                    tick={{ fill: '#94a3b8', fontSize: 10 }}
-                                    label={{ value: "Tasa de Falsos Positivos (FPR)", position: 'insideBottom', offset: -10, fill: '#cbd5e1' }}
-                                />
-                                <YAxis 
-                                    type="number" 
-                                    dataKey="y" 
-                                    name="Tasa de Verdaderos Positivos (TPR)" 
-                                    domain={[0, 1]} 
-                                    tick={{ fill: '#94a3b8', fontSize: 10 }}
-                                    label={{ value: 'Tasa de Verdaderos Positivos (TPR)', angle: -90, position: 'insideLeft', fill: '#cbd5e1', style: {textAnchor: 'middle'} }}
-                                />
-                                <Tooltip
-                                    cursor={{ strokeDasharray: '3 3' }}
-                                    contentStyle={{ backgroundColor: 'rgba(30, 41, 59, 0.9)', borderColor: '#38bdf8' }}
-                                    formatter={(value: number) => value.toFixed(3)}
-                                />
-                                <Line type="monotone" data={[{x:0, y:0}, {x:1, y:1}]} dataKey="y" stroke="#f87171" strokeWidth={1} strokeDasharray="5 5" dot={false} name="Clasificador Aleatorio" />
-                                <Line type="monotone" data={rocCurveData} dataKey="y" stroke="#a78bfa" strokeWidth={2} dot={false} name="Curva ROC" />
-                                <Scatter data={currentRocPoint} dataKey="y" fill="#38bdf8" name="Umbral Actual" />
-                                <ZAxis dataKey="z" range={[100, 101]}/>
-                            </ComposedChart>
-                        </ResponsiveContainer>
+            </div>
+             <div className="space-y-6">
+                <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                     <h3 className="text-xl font-semibold mb-4 text-slate-100">Curva ROC / AUC</h3>
+                     <ResponsiveContainer width="100%" height={300}>
+                         <LineChart data={rocCurveData} margin={{ top: 5, right: 20, left: -10, bottom: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                            <XAxis dataKey="fpr" type="number" domain={[0, 1]} tick={{ fontSize: 12, fill: '#94a3b8' }} label={{ value: 'Tasa de Falsos Positivos (1 - Especificidad)', position: 'insideBottom', offset: -15, fill: '#94a3b8' }}/>
+                            <YAxis dataKey="tpr" type="number" domain={[0, 1]} tick={{ fontSize: 12, fill: '#94a3b8' }} label={{ value: 'Tasa de Verdaderos Positivos (Sensibilidad)', angle: -90, position: 'insideLeft', offset: 10, fill: '#94a3b8' }}/>
+                            <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }} labelFormatter={(value) => `FPR: ${value.toFixed(3)}`} />
+                            <Line type="monotone" dataKey="tpr" stroke="#f97316" strokeWidth={2} dot={false} name="Sensibilidad" />
+                            <Line dataKey="tpr" stroke="transparent" dot={<ActiveDot/>} isAnimationActive={false}/>
+                            {/* FIX: Replaced invalid type="dashed" with strokeDasharray="3 3" to make the line dashed. */}
+                            <Line dataKey={ (payload) => payload.fpr } stroke="#94a3b8" strokeWidth={1} dot={false} name="Aleatorio" strokeDasharray="3 3"/>
+                         </LineChart>
+                     </ResponsiveContainer>
+                     <p className="text-center text-slate-200 mt-2">Área Bajo la Curva (AUC): <span className="font-bold text-2xl text-orange-400">{auc.toFixed(4)}</span></p>
+                </div>
+                <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h2 className="text-xl font-semibold text-slate-100 mb-4">Métricas de Clasificación</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <MetricDisplay label="Exactitud" value={metrics.accuracy} tooltip="Porcentaje de predicciones correctas. (VP+VN)/Total" />
+                        <MetricDisplay label="Precisión" value={metrics.precision} tooltip="De las predicciones positivas, ¿cuántas fueron correctas? VP/(VP+FP)" />
+                        <MetricDisplay label="Sensibilidad (Recall)" value={metrics.recall} tooltip="De todos los positivos reales, ¿cuántos se identificaron? VP/(VP+FN)" />
+                        <MetricDisplay label="Especificidad" value={metrics.specificity} tooltip="De todos los negativos reales, ¿cuántos se identificaron? VN/(VN+FP)" />
+                        <MetricDisplay label="Puntuación F1" value={metrics.f1Score} tooltip="Media armónica de Precisión y Sensibilidad." />
+                        <MetricDisplay label="MCC" value={metrics.mcc} tooltip="Coeficiente de Correlación de Matthews. Medida robusta para clasificación binaria." />
+                        <MetricDisplay label="Prevalencia" value={metrics.prevalence} tooltip="¿Con qué frecuencia ocurre la clase positiva? (VP+FN)/Total" />
+                        <MetricDisplay label="Total" value={`${TOTAL_INSTANCES}`} tooltip="Número total de instancias simuladas." />
                     </div>
                 </div>
             </div>
         </div>
     );
 };
-
-export default ConfusionMatrix;

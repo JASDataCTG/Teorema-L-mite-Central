@@ -2,101 +2,108 @@ import React, { useState, useMemo } from 'react';
 import { calculateSampleSize } from '../utils/dataUtils';
 import { InfoIcon } from './Icons';
 
-interface ParameterInputProps {
-  label: string;
-  tooltip: string;
-  value: number;
-  displayValue?: string;
-  children: React.ReactNode;
-}
-
-const ParameterInput: React.FC<ParameterInputProps> = ({ label, tooltip, children, value, displayValue }) => (
-  <div>
-    <label className="block text-sm font-medium text-sky-300 mb-2">
-      <div className="flex items-center space-x-2">
-        <span>{label}</span>
-        <div className="group relative">
-          <InfoIcon className="h-4 w-4 text-slate-400" />
-          <div className="absolute bottom-full mb-2 w-64 p-2 bg-slate-900 text-slate-300 text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 pointer-events-none">
-            {tooltip}
-          </div>
-        </div>
-      </div>
-    </label>
-    <div className="flex items-center space-x-4">
-      {children}
-      <span className="font-mono text-sky-400 w-20 text-center bg-slate-700 py-1 rounded-md">
-        {displayValue || value}
-      </span>
-    </div>
-  </div>
-);
-
-const Calculator: React.FC = () => {
-  const [populationSize, setPopulationSize] = useState<number | null>(100000);
-  const [isFinite, setIsFinite] = useState<boolean>(true);
+export const Calculator: React.FC = () => {
+  const [populationSize, setPopulationSize] = useState<number | null>(null);
   const [confidenceLevel, setConfidenceLevel] = useState<number>(95);
   const [marginOfError, setMarginOfError] = useState<number>(5);
   const [proportion, setProportion] = useState<number>(50);
 
   const sampleSize = useMemo(() => {
-    return calculateSampleSize(
-      isFinite ? populationSize : null,
-      confidenceLevel,
-      marginOfError,
-      proportion
-    );
-  }, [populationSize, isFinite, confidenceLevel, marginOfError, proportion]);
+    return calculateSampleSize(populationSize, confidenceLevel, marginOfError, proportion);
+  }, [populationSize, confidenceLevel, marginOfError, proportion]);
+
+  const Tooltip: React.FC<{text: string, children: React.ReactNode}> = ({ text, children }) => (
+    <div className="relative flex items-center group">
+        {children}
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 text-xs text-white bg-slate-700 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">
+            {text}
+        </div>
+    </div>
+  );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 p-4 bg-slate-800/50 rounded-lg shadow-lg backdrop-blur-sm">
-      <div className="md:col-span-2 flex flex-col space-y-8">
-        <div>
-          <label className="block text-sm font-medium text-sky-300 mb-2">Tamaño de la Población (N)</label>
-          <div className="flex items-center space-x-4">
-             <input
-              type="number"
-              value={populationSize ?? ''}
-              onChange={(e) => setPopulationSize(e.target.value ? Number(e.target.value) : null)}
-              disabled={!isFinite}
-              className="w-full bg-slate-700 text-white rounded-md p-2 focus:ring-sky-500 focus:border-sky-500 disabled:opacity-50"
-              placeholder="Ej: 100000"
-            />
-            <div className="flex items-center space-x-2">
-                <input type="checkbox" id="finite-pop" checked={!isFinite} onChange={() => setIsFinite(!isFinite)} className="h-4 w-4 rounded border-slate-600 bg-slate-700 text-sky-600 focus:ring-sky-500" />
-                <label htmlFor="finite-pop" className="text-slate-300">Infinita</label>
+    <div className="max-w-2xl mx-auto">
+        <div className="bg-slate-800 p-8 rounded-lg shadow-lg">
+            <h2 className="text-2xl font-bold text-slate-100 mb-6">Calculadora de Tamaño de Muestra</h2>
+            <div className="space-y-6">
+                <div>
+                    <label htmlFor="population-size" className="flex items-center text-sm font-medium text-slate-300 mb-2">
+                        Tamaño de la Población
+                         <Tooltip text="Dejar en blanco para una población desconocida o muy grande.">
+                            <InfoIcon className="w-4 h-4 ml-1.5 text-slate-400" />
+                        </Tooltip>
+                    </label>
+                    <input
+                        id="population-size"
+                        type="number"
+                        placeholder="Ej: 20000"
+                        value={populationSize ?? ''}
+                        onChange={(e) => setPopulationSize(e.target.value ? Number(e.target.value) : null)}
+                        className="mt-1 block w-full pl-3 pr-3 py-2 bg-slate-700 border border-slate-600 rounded-md shadow-sm text-white focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
+                    />
+                </div>
+                <div>
+                    <label htmlFor="confidence-level" className="flex items-center text-sm font-medium text-slate-300 mb-2">
+                        Nivel de Confianza (%)
+                        <Tooltip text="La probabilidad de que la muestra refleje con precisión a la población. 95% es el más común.">
+                            <InfoIcon className="w-4 h-4 ml-1.5 text-slate-400" />
+                        </Tooltip>
+                    </label>
+                    <select
+                        id="confidence-level"
+                        value={confidenceLevel}
+                        onChange={(e) => setConfidenceLevel(Number(e.target.value))}
+                        className="mt-1 block w-full pl-3 pr-10 py-2 text-base bg-slate-700 border-slate-600 text-white focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm rounded-md"
+                    >
+                        <option value={90}>90%</option>
+                        <option value={95}>95%</option>
+                        <option value={99}>99%</option>
+                    </select>
+                </div>
+                 <div>
+                    <label htmlFor="margin-of-error" className="flex items-center text-sm font-medium text-slate-300 mb-2">
+                        Margen de Error (%)
+                        <Tooltip text="La cantidad aceptable de error en los resultados. Un margen de error más pequeño requiere una muestra más grande.">
+                            <InfoIcon className="w-4 h-4 ml-1.5 text-slate-400" />
+                        </Tooltip>
+                    </label>
+                    <input
+                        id="margin-of-error"
+                        type="range"
+                        min="1"
+                        max="10"
+                        step="0.5"
+                        value={marginOfError}
+                        onChange={(e) => setMarginOfError(Number(e.target.value))}
+                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                    />
+                    <div className="text-right text-sm text-slate-400">{marginOfError}%</div>
+                </div>
+                <div>
+                    <label htmlFor="proportion" className="flex items-center text-sm font-medium text-slate-300 mb-2">
+                        Proporción de la Población (%)
+                        <Tooltip text="Una estimación de la proporción de la población con una cierta característica. Use 50% para el tamaño de muestra más conservador.">
+                            <InfoIcon className="w-4 h-4 ml-1.5 text-slate-400" />
+                        </Tooltip>
+                    </label>
+                    <input
+                        id="proportion"
+                        type="range"
+                        min="1"
+                        max="99"
+                        step="1"
+                        value={proportion}
+                        onChange={(e) => setProportion(Number(e.target.value))}
+                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                    />
+                    <div className="text-right text-sm text-slate-400">{proportion}%</div>
+                </div>
             </div>
-          </div>
+            <div className="mt-8 pt-6 border-t border-slate-700 text-center">
+                <p className="text-lg font-medium text-slate-300">Tamaño de Muestra Recomendado:</p>
+                <p className="text-5xl font-bold text-teal-400 mt-2">{sampleSize}</p>
+            </div>
         </div>
-        
-        <ParameterInput label="Nivel de Confianza (Z)" tooltip="La probabilidad de que la media de la muestra caiga dentro de un rango específico de la media poblacional. 95% es el estándar." value={confidenceLevel} displayValue={`${confidenceLevel}%`}>
-          <select value={confidenceLevel} onChange={(e) => setConfidenceLevel(Number(e.target.value))} className="w-full bg-slate-700 text-white rounded-md p-2 focus:ring-sky-500 focus:border-sky-500">
-            <option value={90}>90%</option>
-            <option value={95}>95%</option>
-            <option value={99}>99%</option>
-          </select>
-        </ParameterInput>
-
-        <ParameterInput label="Margen de Error (E)" tooltip="La cantidad máxima permitida de error en los resultados. Un valor más bajo requiere una muestra más grande." value={marginOfError} displayValue={`${marginOfError}%`}>
-          <input type="range" min="1" max="10" step="0.5" value={marginOfError} onChange={(e) => setMarginOfError(Number(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
-        </ParameterInput>
-
-         <ParameterInput label="Proporción Esperada (p)" tooltip="La proporción estimada de la población que tiene el atributo de interés. Usa 50% si no tienes una estimación previa para obtener el tamaño de muestra más conservador." value={proportion} displayValue={`${proportion}%`}>
-          <input type="range" min="1" max="99" value={proportion} onChange={(e) => setProportion(Number(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
-        </ParameterInput>
-      </div>
-      
-      <div className="flex flex-col items-center justify-center bg-slate-900/50 p-6 rounded-lg text-center">
-        <h3 className="text-lg font-semibold text-slate-400 mb-2">Tamaño de Muestra Requerido</h3>
-        <p className="text-5xl lg:text-6xl font-bold text-emerald-400 tracking-tight">
-          {sampleSize.toLocaleString()}
-        </p>
-         <p className="text-slate-400 mt-4 text-sm">
-           Este es el número mínimo de individuos que necesitas encuestar para obtener resultados que reflejen a la población con el nivel de confianza y margen de error seleccionados.
-        </p>
-      </div>
     </div>
   );
 };
-
-export default Calculator;
