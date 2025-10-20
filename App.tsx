@@ -41,12 +41,12 @@ const App: React.FC = () => {
 
       <main className="container mx-auto px-4 py-8">
         <div className="border-b border-slate-700 mb-8">
-            <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+            <nav className="-mb-px flex space-x-2 sm:space-x-6 overflow-x-auto pb-2" aria-label="Tabs">
                 {tabs.map((tab) => (
                     <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center whitespace-nowrap px-1 py-4 text-base font-medium transition-colors duration-200 ease-in-out
+                    className={`flex items-center whitespace-nowrap px-3 py-4 text-sm sm:text-base font-medium transition-colors duration-200 ease-in-out
                         ${activeTab === tab.id
                         ? 'border-b-2 border-orange-500 text-orange-500'
                         : 'border-transparent text-slate-400 hover:text-orange-500'
