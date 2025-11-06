@@ -33,9 +33,9 @@ const App: React.FC = () => {
     <div className="min-h-screen font-sans text-slate-200">
       <header className="bg-slate-800 shadow-lg">
         <div className="container mx-auto px-4 py-5">
-          <h1 className="text-3xl font-bold text-white">Explorador de Conceptos Estadísticos</h1>
+          <h1 className="text-3xl font-bold text-white">Explorador Interactivo para Ciencia de Datos</h1>
           <h2 className="text-3xl font-bold text-white">Desarrollado por: Ing. Jairo Acosta Solano</h2>
-          <p className="text-slate-300 mt-1">Una herramienta interactiva para explorar el Teorema del Límite Central, calcular tamaños de muestra y analizar métricas de clasificación.</p>
+          <p className="text-slate-300 mt-1">Una herramienta para simular conceptos clave siguiendo la metodología CRISP-DM.</p>
         </div>
       </header>
 

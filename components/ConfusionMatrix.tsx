@@ -39,10 +39,11 @@ const scenarios: Scenario[] = [
   },
 ];
 
-const generateStaticExplanation = (
+const generateCrispDmAnalysis = (
     scenario: Scenario,
     metrics: any,
     auc: number,
+    threshold: number,
     { tp, fp, fn, tn }: { tp: number, fp: number, fn: number, tn: number }
 ): string => {
     const formatPercent = (val: number) => (val * 100).toFixed(1);
@@ -63,89 +64,45 @@ const generateStaticExplanation = (
 
     const total = tp + fp + fn + tn;
     const codeExamples = `
-        <h4 style="font-weight: bold; font-size: 1.1em; margin-top: 1.5em; margin-bottom: 0.75em; border-top: 1px solid #475569; padding-top: 1em;">Ejemplos de Cálculo de Métricas</h4>
-        <style>
-            .code-details { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; margin-bottom: 0.5rem; overflow: hidden; }
-            .code-summary { cursor: pointer; padding: 0.5rem 1rem; font-weight: bold; color: #cbd5e1; list-style-position: inside; }
-            .code-summary:focus { outline: none; box-shadow: inset 0 0 0 2px #f97316; }
-            .code-block { background-color: #0f172a; padding: 1rem; margin: 0; white-space: pre-wrap; word-wrap: break-word; font-size: 0.875em; color: #e2e8f0; }
-            .code-keyword { color: #f97316; }
-            .code-number { color: #34d399; }
-            .code-comment { color: #64748b; }
-        </style>
-        ${createCodeBlock(
-            'Exactitud (Accuracy)',
-            '(VP + VN) / Total',
-            `(${tp} + ${tn}) / ${total}`,
-            metrics.accuracy.toFixed(4)
-        )}
-        ${createCodeBlock(
-            'Precisión (Precision)',
-            'VP / (VP + FP)',
-            `${tp} / (${tp} + ${fp})`,
-            metrics.precision.toFixed(4)
-        )}
-        ${createCodeBlock(
-            'Sensibilidad (Recall)',
-            'VP / (VP + FN)',
-            `${tp} / (${tp} + ${fn})`,
-            metrics.recall.toFixed(4)
-        )}
-        ${createCodeBlock(
-            'Especificidad (Specificity)',
-            'VN / (VN + FP)',
-            `${tn} / (${tn} + ${fp})`,
-            metrics.specificity.toFixed(4)
-        )}
-        ${createCodeBlock(
-            'Puntuación F1 (F1-Score)',
-            '2 * (Precisión * Sensibilidad) / (Precisión + Sensibilidad)',
-            `2 * (${metrics.precision.toFixed(3)} * ${metrics.recall.toFixed(3)}) / (${metrics.precision.toFixed(3)} + ${metrics.recall.toFixed(3)})`,
-            metrics.f1Score.toFixed(4)
-        )}
+        ${createCodeBlock('Exactitud (Accuracy)', '(VP + VN) / Total', `(${tp} + ${tn}) / ${total}`, metrics.accuracy.toFixed(4))}
+        ${createCodeBlock('Precisión (Precision)', 'VP / (VP + FP)', `${tp} / (${tp} + ${fp})`, metrics.precision.toFixed(4))}
+        ${createCodeBlock('Sensibilidad (Recall)', 'VP / (VP + FN)', `${tp} / (${tp} + ${fn})`, metrics.recall.toFixed(4))}
+        ${createCodeBlock('Especificidad (Specificity)', 'VN / (VN + FP)', `${tn} / (${tn} + ${fp})`, metrics.specificity.toFixed(4))}
+        ${createCodeBlock('Puntuación F1 (F1-Score)', '2 * (Precisión * Sensibilidad) / (Precisión + Sensibilidad)', `2 * (${metrics.precision.toFixed(3)} * ${metrics.recall.toFixed(3)}) / (${metrics.precision.toFixed(3)} + ${metrics.recall.toFixed(3)})`, metrics.f1Score.toFixed(4))}
     `;
 
-    const commonPart = `
-        <p>La <strong>Puntuación F1 (${metrics.f1Score.toFixed(3)})</strong> y el <strong>AUC (${auc.toFixed(4)})</strong> son métricas generales que evalúan el rendimiento global del modelo. Un AUC cercano a 1.0 indica una excelente capacidad para distinguir entre clases.</p>
-        <p>Ajustar el <strong>umbral de clasificación</strong> permite encontrar el equilibrio deseado entre las diferentes métricas para optimizar el modelo según las necesidades específicas del problema.</p>
-        ${codeExamples}
-    `;
+    const getScenarioSpecificEvaluation = (scenario: Scenario, metrics: any) => {
+      switch(scenario.id) {
+          case 'cancer': return `<ul class="crisp-list"><li><strong>Sensibilidad (Recall): ${metrics.recall.toFixed(3)}</strong>. El modelo detecta al <strong>${formatPercent(metrics.recall)}%</strong> de los casos reales. Esto es el indicador clave de éxito aquí.</li><li><strong>Precisión: ${metrics.precision.toFixed(3)}</strong>. Un <strong>${formatPercent(metrics.precision)}%</strong> de las alarmas son correctas. Un valor bajo es aceptable si la sensibilidad es alta.</li></ul>`;
+          case 'fraud': return `<ul class="crisp-list"><li><strong>Precisión: ${metrics.precision.toFixed(3)}</strong>. El <strong>${formatPercent(metrics.precision)}%</strong> de las transacciones bloqueadas son realmente fraudulentas. Esta es la métrica prioritaria para no afectar a los clientes.</li><li><strong>Sensibilidad (Recall): ${metrics.recall.toFixed(3)}</strong>. Se está capturando el <strong>${formatPercent(metrics.recall)}%</strong> del fraude total.</li></ul>`;
+          case 'spam': return `<ul class="crisp-list"><li><strong>Precisión: ${metrics.precision.toFixed(3)}</strong>. Un <strong>${formatPercent(metrics.precision)}%</strong> de los correos marcados como spam lo son realmente. Esencial para no perder emails importantes.</li><li><strong>Sensibilidad (Recall): ${metrics.recall.toFixed(3)}</strong>. El filtro está bloqueando el <strong>${formatPercent(metrics.recall)}%</strong> del total de spam.</li></ul>`;
+          default: return '';
+      }
+    };
+    
+    const phase1 = `<h4 class="crisp-phase">Fase 1: Comprensión del Negocio</h4><p><strong>Objetivo:</strong> ${scenario.description}</p><p><strong>Meta principal:</strong> En este contexto, el éxito se mide por la capacidad del modelo para ${scenario.id === 'cancer' ? 'maximizar la detección de casos positivos reales (alta <strong>Sensibilidad</strong>)' : scenario.id === 'fraud' ? 'minimizar la interrupción a clientes legítimos (alta <strong>Precisión</strong>)' : 'evitar que correos importantes se pierdan en la carpeta de spam (alta <strong>Precisión</strong>)'}.</p>`;
+    const phase2 = `<h4 class="crisp-phase">Fase 2: Comprensión de los Datos</h4><p>El análisis inicial de los datos simulados muestra una <strong>Prevalencia</strong> del <strong>${formatPercent(metrics.prevalence)}%</strong>. Esto significa que la clase positiva (cáncer, fraude, spam) es ${metrics.prevalence < 0.2 ? 'muy rara' : metrics.prevalence < 0.4 ? 'minoritaria' : 'común'}. Este desbalance es crítico; una métrica como la <strong>Exactitud</strong> por sí sola podría ser engañosa, ya que un modelo que siempre predice "negativo" tendría una alta exactitud pero sería inútil.</p>`;
+    const phase3 = `<h4 class="crisp-phase">Fase 3: Modelado</h4><p>Hemos simulado un modelo que asigna una puntuación de probabilidad a cada instancia. Ahora estamos en la etapa de calibración, donde ajustamos el <strong>umbral de clasificación</strong>. Actualmente está en <strong>${threshold.toFixed(2)}</strong>. Este umbral determina el punto de corte para decidir si una instancia es clasificada como positiva o negativa, lo cual impacta directamente en el balance entre falsos positivos y falsos negativos.</p>`;
+    const phase4 = `<h4 class="crisp-phase">Fase 4: Evaluación</h4><p>Evaluamos el rendimiento del modelo con el umbral actual utilizando la matriz de confusión y métricas clave. El objetivo es determinar si el modelo cumple los requisitos del negocio.</p><p><strong>Interpretación para "${scenario.name}":</strong></p>${getScenarioSpecificEvaluation(scenario, metrics)}<p>El <strong>Área Bajo la Curva ROC (AUC)</strong> es <strong>${auc.toFixed(4)}</strong>, lo que indica la capacidad general del modelo para discriminar entre clases positivas y negativas a través de todos los umbrales. Un valor cercano a 1.0 es ideal.</p><h5 class="crisp-sub-phase">Detalle del Cálculo de Métricas</h5>${codeExamples}`;
+    const phase5 = `<h4 class="crisp-phase">Fase 5: Decisión de Despliegue</h4><p><strong>Recomendación:</strong> Con la configuración actual (umbral = ${threshold.toFixed(2)}), el modelo ${ scenario.id === 'cancer' && metrics.recall > 0.9 ? '<strong>cumple</strong>' : scenario.id !== 'cancer' && metrics.precision > 0.9 ? '<strong>cumple</strong>' : '<strong>podría no cumplir</strong>'} el objetivo de negocio principal. Se recomienda ${ scenario.id === 'cancer' && metrics.recall < 0.9 ? 'reducir el umbral para aumentar la sensibilidad' : scenario.id !== 'cancer' && metrics.precision < 0.9 ? 'aumentar el umbral para mejorar la precisión' : 'proceder con una fase de prueba A/B para validar su impacto en un entorno real' }. Este análisis iterativo es clave en el ciclo de vida de un proyecto de ciencia de datos.</p>`;
 
-    switch(scenario.id) {
-        case 'cancer':
-            return `
-                <h4 style="font-weight: bold; font-size: 1.1em; margin-bottom: 0.5em;">Análisis del Modelo de Diagnóstico de Cáncer</h4>
-                <p>En este escenario, el objetivo principal es <strong>no pasar por alto ningún caso real de cáncer</strong>. Por lo tanto, se prioriza una alta <strong>Sensibilidad (Recall)</strong>.</p>
-                <ul style="list-style-type: disc; margin-left: 20px; margin-top: 1em; margin-bottom: 1em;">
-                    <li><strong>Sensibilidad actual (${metrics.recall.toFixed(3)})</strong>: El modelo identifica correctamente al <strong>${formatPercent(metrics.recall)}%</strong> de los tumores malignos reales. ${metrics.recall > 0.9 ? 'Esto es excelente, minimizando los casos no detectados.' : 'Un valor más bajo aquí es riesgoso, ya que implica que casos reales no son detectados.'}</li>
-                    <li><strong>Precisión actual (${metrics.precision.toFixed(3)})</strong>: De todas las alertas positivas generadas, el <strong>${formatPercent(metrics.precision)}%</strong> son realmente cáncer. ${metrics.precision < 0.5 ? 'Una precisión baja significa más "falsas alarmas", pero es un compromiso a menudo aceptable para maximizar la detección.' : 'Un buen valor que reduce la cantidad de estudios adicionales para pacientes sanos.'}</li>
-                </ul>
-                ${commonPart}
-            `;
-        case 'fraud':
-            return `
-                <h4 style="font-weight: bold; font-size: 1.1em; margin-bottom: 0.5em;">Análisis del Modelo de Detección de Fraude</h4>
-                <p>Aquí, es crucial <strong>no molestar a los clientes bloqueando transacciones legítimas</strong>. Por lo tanto, se prioriza una alta <strong>Precisión</strong>.</p>
-                <ul style="list-style-type: disc; margin-left: 20px; margin-top: 1em; margin-bottom: 1em;">
-                    <li><strong>Precisión actual (${metrics.precision.toFixed(3)})</strong>: De todas las transacciones marcadas como fraudulentas, el <strong>${formatPercent(metrics.precision)}%</strong> lo son realmente. ${metrics.precision > 0.9 ? 'Un valor alto es ideal, ya que asegura que la mayoría de las alertas son correctas y se minimizan las molestias a los clientes.' : 'Una precisión más baja podría causar una mala experiencia al cliente al bloquear compras válidas.'}</li>
-                    <li><strong>Sensibilidad actual (${metrics.recall.toFixed(3)})</strong>: El modelo detecta el <strong>${formatPercent(metrics.recall)}%</strong> de todas las transacciones fraudulentas reales. Es el equilibrio: un recall muy alto podría lograrse a costa de una menor precisión, marcando muchas transacciones legítimas como sospechosas.</li>
-                </ul>
-                ${commonPart}
-            `;
-        case 'spam':
-            return `
-                <h4 style="font-weight: bold; font-size: 1.1em; margin-bottom: 0.5em;">Análisis del Filtro de Correo no Deseado</h4>
-                <p>El objetivo principal es <strong>evitar que correos importantes sean clasificados como spam</strong> (falsos positivos). Por lo tanto, se busca una alta <strong>Precisión</strong>.</p>
-                <ul style="list-style-type: disc; margin-left: 20px; margin-top: 1em; margin-bottom: 1em;">
-                    <li><strong>Precisión actual (${metrics.precision.toFixed(3)})</strong>: De todos los correos que el filtro envía a la carpeta de spam, el <strong>${formatPercent(metrics.precision)}%</strong> son realmente spam. ${metrics.precision > 0.9 ? 'Un valor alto es fundamental para garantizar que los usuarios no pierdan correos importantes.' : 'Una precisión baja significaría que muchos correos legítimos van a spam, lo cual es muy problemático.'}</li>
-                    <li><strong>Sensibilidad actual (${metrics.recall.toFixed(3)})</strong>: El filtro captura el <strong>${formatPercent(metrics.recall)}%</strong> de todo el spam recibido. ${metrics.recall < 0.9 ? 'Una sensibilidad menor es aceptable si a cambio se obtiene una precisión muy alta. Es preferible que algún correo de spam llegue a la bandeja de entrada a que uno importante se pierda.' : 'Un buen valor que mantiene la bandeja de entrada limpia.'}</li>
-                </ul>
-                ${commonPart}
-            `;
-        default:
-            return '<p>Selecciona un escenario para ver un análisis detallado.</p>';
-    }
+    return `
+      <style>
+          .crisp-phase { font-weight: bold; font-size: 1.1em; margin-top: 1.25em; margin-bottom: 0.5em; color: #f97316; border-bottom: 1px solid #475569; padding-bottom: 0.25em; }
+          .crisp-sub-phase { font-weight: bold; font-size: 1.0em; margin-top: 1em; margin-bottom: 0.5em; color: #fbbf24; }
+          .crisp-list { list-style-type: disc; margin-left: 20px; margin-bottom: 1em; }
+          .code-details { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; margin-bottom: 0.5rem; overflow: hidden; }
+          .code-summary { cursor: pointer; padding: 0.5rem 1rem; font-weight: bold; color: #cbd5e1; list-style-position: inside; }
+          .code-summary:focus { outline: none; box-shadow: inset 0 0 0 2px #f97316; }
+          .code-block { background-color: #0f172a; padding: 1rem; margin: 0; white-space: pre-wrap; word-wrap: break-word; font-size: 0.875em; color: #e2e8f0; }
+          .code-keyword { color: #f97316; }
+          .code-number { color: #34d399; }
+          .code-comment { color: #64748b; }
+      </style>
+      ${phase1}${phase2}${phase3}${phase4}${phase5}
+    `;
 };
+
 
 // Custom Dot for the active point on ROC curve
 const ActiveDot = (props: any) => {
@@ -327,12 +284,12 @@ export const ConfusionMatrix: React.FC = () => {
     useEffect(() => {
         const scenario = scenarios.find(s => s.id === selectedScenarioId);
         if (scenario) {
-            const explanationHtml = generateStaticExplanation(scenario, metrics, auc, { tp, fp, fn, tn });
+            const explanationHtml = generateCrispDmAnalysis(scenario, metrics, auc, threshold, { tp, fp, fn, tn });
             setExplanation(explanationHtml);
         } else {
             setExplanation('');
         }
-    }, [selectedScenarioId, metrics, auc, tp, fp, fn, tn]);
+    }, [selectedScenarioId, metrics, auc, tp, fp, fn, tn, threshold]);
 
 
     const MatrixCell: React.FC<{ label: string; value: number; bgColor: string; textColor: string; description: string }> = ({ label, value, bgColor, textColor, description }) => (
@@ -435,7 +392,7 @@ export const ConfusionMatrix: React.FC = () => {
                     </div>
                 </div>
                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                    <h2 className="text-xl font-semibold text-slate-100 mb-4">Análisis de Resultados</h2>
+                    <h2 className="text-xl font-semibold text-slate-100 mb-4">Análisis de Resultados (Metodología CRISP-DM)</h2>
                      <div>
                         <label htmlFor="scenario-select" className="block text-sm font-medium text-slate-300 mb-2">
                             Selecciona un Escenario de Aplicación:
@@ -452,9 +409,6 @@ export const ConfusionMatrix: React.FC = () => {
                     </div>
                     {selectedScenarioId && (
                         <div className="mt-4">
-                            <p className="text-sm text-slate-400 bg-slate-900/50 p-3 rounded-md border border-slate-700">
-                                {scenarios.find(s => s.id === selectedScenarioId)?.description}
-                            </p>
                             <div className="mt-4">
                                 {explanation && (
                                     <div className="prose prose-sm prose-invert bg-slate-900/50 p-4 rounded-md border border-slate-700 max-w-none" dangerouslySetInnerHTML={{ __html: explanation }}></div>

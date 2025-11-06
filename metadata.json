@@ -1,5 +1,5 @@
 {
-  "name": "Herramientas Estadísticas: TLC y Calculadora de Muestra",
-  "description": "Una suite interactiva que incluye un simulador del Teorema del Límite Central, una calculadora de tamaño de muestra y un simulador de matriz de confusión para evaluar modelos de clasificación.",
+  "name": "Explorador Interactivo para Ciencia de Datos (CRISP-DM)",
+  "description": "Una suite interactiva para simular el Teorema del Límite Central, calcular tamaños de muestra y analizar modelos de clasificación usando la metodología CRISP-DM.",
   "requestFramePermissions": []
 }
