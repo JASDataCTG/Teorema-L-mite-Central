@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import { calculateClassificationMetrics, generateNormalData, calculateAuc } from '../utils/dataUtils';
-import { InfoIcon, GeminiIcon } from './Icons';
+import { InfoIcon } from './Icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, ReferenceLine, Dot } from 'recharts';
 
 const TOTAL_INSTANCES = 1000;
@@ -17,7 +16,6 @@ type Scenario = {
     negStdDev: number;
   };
   description: string;
-  promptContext: string;
 };
 
 const scenarios: Scenario[] = [
@@ -26,24 +24,128 @@ const scenarios: Scenario[] = [
     name: 'Diagnóstico de Cáncer (Prueba Preliminar)',
     params: { prevalence: 0.05, posMean: 0.80, posStdDev: 0.15, negMean: 0.20, negStdDev: 0.18, },
     description: 'Un modelo de IA analiza imágenes médicas para una detección temprana de cáncer. Un "positivo" significa que el modelo cree que hay cáncer. Es crucial no pasar por alto casos reales (alta sensibilidad), incluso si eso significa tener algunos falsos positivos que luego serán descartados por un especialista.',
-    promptContext: 'En el contexto de un modelo de IA para la detección temprana de cáncer a partir de imágenes médicas.'
   },
   {
     id: 'fraud',
     name: 'Detección de Fraude con Tarjetas',
     params: { prevalence: 0.01, posMean: 0.90, posStdDev: 0.12, negMean: 0.10, negStdDev: 0.10, },
     description: 'Un sistema monitorea transacciones en tiempo real para identificar posibles fraudes. Un "positivo" es una transacción marcada como fraudulenta. Una alta precisión es vital para no molestar a los clientes bloqueando transacciones legítimas. Un falso positivo significa bloquear la tarjeta de un cliente inocente.',
-     promptContext: 'En el contexto de un sistema que detecta transacciones fraudulentas con tarjetas de crédito en tiempo real.'
   },
   {
     id: 'spam',
     name: 'Filtro de Correo no Deseado (Spam)',
     params: { prevalence: 0.30, posMean: 0.85, posStdDev: 0.10, negMean: 0.15, negStdDev: 0.15,},
     description: 'Un algoritmo clasifica los correos entrantes como "Spam" (positivo) o "No Spam" (negativo). Es muy importante no clasificar un correo importante como spam (evitar falsos positivos). Por lo tanto, se prioriza una alta precisión, a veces a costa de dejar pasar algo de spam a la bandeja de entrada (menor sensibilidad).',
-    promptContext: 'En el contexto de un filtro de correo no deseado (spam).'
   },
 ];
 
+const generateStaticExplanation = (
+    scenario: Scenario,
+    metrics: any,
+    auc: number,
+    { tp, fp, fn, tn }: { tp: number, fp: number, fn: number, tn: number }
+): string => {
+    const formatPercent = (val: number) => (val * 100).toFixed(1);
+
+    const createCodeBlock = (title: string, formula: string, calculation: string, result: string) => {
+        return `
+            <details class="code-details">
+                <summary class="code-summary">${title}</summary>
+                <pre class="code-block"><code><span class="code-comment"># Fórmula</span>
+<span class="code-keyword">${title}</span> = ${formula}
+
+<span class="code-comment"># Cálculo con valores actuales</span>
+<span class="code-keyword">${title}</span> = ${calculation}
+<span class="code-keyword">${title}</span> = <span class="code-number">${result}</span></code></pre>
+            </details>
+        `;
+    };
+
+    const total = tp + fp + fn + tn;
+    const codeExamples = `
+        <h4 style="font-weight: bold; font-size: 1.1em; margin-top: 1.5em; margin-bottom: 0.75em; border-top: 1px solid #475569; padding-top: 1em;">Ejemplos de Cálculo de Métricas</h4>
+        <style>
+            .code-details { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; margin-bottom: 0.5rem; overflow: hidden; }
+            .code-summary { cursor: pointer; padding: 0.5rem 1rem; font-weight: bold; color: #cbd5e1; list-style-position: inside; }
+            .code-summary:focus { outline: none; box-shadow: inset 0 0 0 2px #f97316; }
+            .code-block { background-color: #0f172a; padding: 1rem; margin: 0; white-space: pre-wrap; word-wrap: break-word; font-size: 0.875em; color: #e2e8f0; }
+            .code-keyword { color: #f97316; }
+            .code-number { color: #34d399; }
+            .code-comment { color: #64748b; }
+        </style>
+        ${createCodeBlock(
+            'Exactitud (Accuracy)',
+            '(VP + VN) / Total',
+            `(${tp} + ${tn}) / ${total}`,
+            metrics.accuracy.toFixed(4)
+        )}
+        ${createCodeBlock(
+            'Precisión (Precision)',
+            'VP / (VP + FP)',
+            `${tp} / (${tp} + ${fp})`,
+            metrics.precision.toFixed(4)
+        )}
+        ${createCodeBlock(
+            'Sensibilidad (Recall)',
+            'VP / (VP + FN)',
+            `${tp} / (${tp} + ${fn})`,
+            metrics.recall.toFixed(4)
+        )}
+        ${createCodeBlock(
+            'Especificidad (Specificity)',
+            'VN / (VN + FP)',
+            `${tn} / (${tn} + ${fp})`,
+            metrics.specificity.toFixed(4)
+        )}
+        ${createCodeBlock(
+            'Puntuación F1 (F1-Score)',
+            '2 * (Precisión * Sensibilidad) / (Precisión + Sensibilidad)',
+            `2 * (${metrics.precision.toFixed(3)} * ${metrics.recall.toFixed(3)}) / (${metrics.precision.toFixed(3)} + ${metrics.recall.toFixed(3)})`,
+            metrics.f1Score.toFixed(4)
+        )}
+    `;
+
+    const commonPart = `
+        <p>La <strong>Puntuación F1 (${metrics.f1Score.toFixed(3)})</strong> y el <strong>AUC (${auc.toFixed(4)})</strong> son métricas generales que evalúan el rendimiento global del modelo. Un AUC cercano a 1.0 indica una excelente capacidad para distinguir entre clases.</p>
+        <p>Ajustar el <strong>umbral de clasificación</strong> permite encontrar el equilibrio deseado entre las diferentes métricas para optimizar el modelo según las necesidades específicas del problema.</p>
+        ${codeExamples}
+    `;
+
+    switch(scenario.id) {
+        case 'cancer':
+            return `
+                <h4 style="font-weight: bold; font-size: 1.1em; margin-bottom: 0.5em;">Análisis del Modelo de Diagnóstico de Cáncer</h4>
+                <p>En este escenario, el objetivo principal es <strong>no pasar por alto ningún caso real de cáncer</strong>. Por lo tanto, se prioriza una alta <strong>Sensibilidad (Recall)</strong>.</p>
+                <ul style="list-style-type: disc; margin-left: 20px; margin-top: 1em; margin-bottom: 1em;">
+                    <li><strong>Sensibilidad actual (${metrics.recall.toFixed(3)})</strong>: El modelo identifica correctamente al <strong>${formatPercent(metrics.recall)}%</strong> de los tumores malignos reales. ${metrics.recall > 0.9 ? 'Esto es excelente, minimizando los casos no detectados.' : 'Un valor más bajo aquí es riesgoso, ya que implica que casos reales no son detectados.'}</li>
+                    <li><strong>Precisión actual (${metrics.precision.toFixed(3)})</strong>: De todas las alertas positivas generadas, el <strong>${formatPercent(metrics.precision)}%</strong> son realmente cáncer. ${metrics.precision < 0.5 ? 'Una precisión baja significa más "falsas alarmas", pero es un compromiso a menudo aceptable para maximizar la detección.' : 'Un buen valor que reduce la cantidad de estudios adicionales para pacientes sanos.'}</li>
+                </ul>
+                ${commonPart}
+            `;
+        case 'fraud':
+            return `
+                <h4 style="font-weight: bold; font-size: 1.1em; margin-bottom: 0.5em;">Análisis del Modelo de Detección de Fraude</h4>
+                <p>Aquí, es crucial <strong>no molestar a los clientes bloqueando transacciones legítimas</strong>. Por lo tanto, se prioriza una alta <strong>Precisión</strong>.</p>
+                <ul style="list-style-type: disc; margin-left: 20px; margin-top: 1em; margin-bottom: 1em;">
+                    <li><strong>Precisión actual (${metrics.precision.toFixed(3)})</strong>: De todas las transacciones marcadas como fraudulentas, el <strong>${formatPercent(metrics.precision)}%</strong> lo son realmente. ${metrics.precision > 0.9 ? 'Un valor alto es ideal, ya que asegura que la mayoría de las alertas son correctas y se minimizan las molestias a los clientes.' : 'Una precisión más baja podría causar una mala experiencia al cliente al bloquear compras válidas.'}</li>
+                    <li><strong>Sensibilidad actual (${metrics.recall.toFixed(3)})</strong>: El modelo detecta el <strong>${formatPercent(metrics.recall)}%</strong> de todas las transacciones fraudulentas reales. Es el equilibrio: un recall muy alto podría lograrse a costa de una menor precisión, marcando muchas transacciones legítimas como sospechosas.</li>
+                </ul>
+                ${commonPart}
+            `;
+        case 'spam':
+            return `
+                <h4 style="font-weight: bold; font-size: 1.1em; margin-bottom: 0.5em;">Análisis del Filtro de Correo no Deseado</h4>
+                <p>El objetivo principal es <strong>evitar que correos importantes sean clasificados como spam</strong> (falsos positivos). Por lo tanto, se busca una alta <strong>Precisión</strong>.</p>
+                <ul style="list-style-type: disc; margin-left: 20px; margin-top: 1em; margin-bottom: 1em;">
+                    <li><strong>Precisión actual (${metrics.precision.toFixed(3)})</strong>: De todos los correos que el filtro envía a la carpeta de spam, el <strong>${formatPercent(metrics.precision)}%</strong> son realmente spam. ${metrics.precision > 0.9 ? 'Un valor alto es fundamental para garantizar que los usuarios no pierdan correos importantes.' : 'Una precisión baja significaría que muchos correos legítimos van a spam, lo cual es muy problemático.'}</li>
+                    <li><strong>Sensibilidad actual (${metrics.recall.toFixed(3)})</strong>: El filtro captura el <strong>${formatPercent(metrics.recall)}%</strong> de todo el spam recibido. ${metrics.recall < 0.9 ? 'Una sensibilidad menor es aceptable si a cambio se obtiene una precisión muy alta. Es preferible que algún correo de spam llegue a la bandeja de entrada a que uno importante se pierda.' : 'Un buen valor que mantiene la bandeja de entrada limpia.'}</li>
+                </ul>
+                ${commonPart}
+            `;
+        default:
+            return '<p>Selecciona un escenario para ver un análisis detallado.</p>';
+    }
+};
 
 // Custom Dot for the active point on ROC curve
 const ActiveDot = (props: any) => {
@@ -98,8 +200,6 @@ export const ConfusionMatrix: React.FC = () => {
 
     const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
     const [explanation, setExplanation] = useState<string>('');
-    const [isGenerating, setIsGenerating] = useState<boolean>(false);
-    const [geminiError, setGeminiError] = useState<string>('');
 
     const scores = useMemo(() => {
         const numPositive = Math.round(TOTAL_INSTANCES * prevalence);
@@ -214,8 +314,6 @@ export const ConfusionMatrix: React.FC = () => {
     const handleScenarioChange = (id: string) => {
         const scenario = scenarios.find(s => s.id === id);
         setSelectedScenarioId(id);
-        setExplanation('');
-        setGeminiError('');
         if (scenario) {
             const { prevalence, posMean, posStdDev, negMean, negStdDev } = scenario.params;
             setPrevalence(prevalence);
@@ -226,44 +324,15 @@ export const ConfusionMatrix: React.FC = () => {
         }
     };
     
-    const handleGenerateExplanation = async () => {
+    useEffect(() => {
         const scenario = scenarios.find(s => s.id === selectedScenarioId);
-        if (!scenario) return;
-
-        setIsGenerating(true);
-        setExplanation('');
-        setGeminiError('');
-
-        const prompt = `
-            Actúa como un científico de datos experto explicando los resultados de un modelo de clasificación a un público no técnico.
-
-            **Contexto del Problema:** ${scenario.name}. ${scenario.promptContext}
-
-            **Métricas Actuales del Modelo:**
-            *   Exactitud: ${metrics.accuracy.toFixed(3)}
-            *   Precisión: ${metrics.precision.toFixed(3)}
-            *   Sensibilidad (Recall): ${metrics.recall.toFixed(3)}
-            *   Puntuación F1: ${metrics.f1Score.toFixed(3)}
-            *   AUC: ${auc.toFixed(4)}
-
-            **Tu Tarea:**
-            En español, proporciona una explicación concisa (2-3 párrafos) de lo que estas métricas significan en el contexto de '${scenario.name}'. Enfócate en las implicaciones prácticas y el equilibrio entre las métricas. Por ejemplo, si la sensibilidad es baja en un diagnóstico médico, ¿qué significa para los pacientes? Si la precisión es baja en la detección de fraude, ¿qué impacto tiene en los clientes? Usa un lenguaje claro, evita la jerga técnica y formatea la respuesta en Markdown.
-        `;
-
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-            });
-            setExplanation(response.text);
-        } catch (error) {
-            console.error("Error generating explanation:", error);
-            setGeminiError("No se pudo generar la explicación. Por favor, inténtalo de nuevo.");
-        } finally {
-            setIsGenerating(false);
+        if (scenario) {
+            const explanationHtml = generateStaticExplanation(scenario, metrics, auc, { tp, fp, fn, tn });
+            setExplanation(explanationHtml);
+        } else {
+            setExplanation('');
         }
-    };
+    }, [selectedScenarioId, metrics, auc, tp, fp, fn, tn]);
 
 
     const MatrixCell: React.FC<{ label: string; value: number; bgColor: string; textColor: string; description: string }> = ({ label, value, bgColor, textColor, description }) => (
@@ -366,7 +435,7 @@ export const ConfusionMatrix: React.FC = () => {
                     </div>
                 </div>
                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                    <h2 className="text-xl font-semibold text-slate-100 mb-4">Análisis con IA</h2>
+                    <h2 className="text-xl font-semibold text-slate-100 mb-4">Análisis de Resultados</h2>
                      <div>
                         <label htmlFor="scenario-select" className="block text-sm font-medium text-slate-300 mb-2">
                             Selecciona un Escenario de Aplicación:
@@ -386,19 +455,10 @@ export const ConfusionMatrix: React.FC = () => {
                             <p className="text-sm text-slate-400 bg-slate-900/50 p-3 rounded-md border border-slate-700">
                                 {scenarios.find(s => s.id === selectedScenarioId)?.description}
                             </p>
-                            <button
-                                onClick={handleGenerateExplanation}
-                                disabled={isGenerating}
-                                className="w-full mt-4 flex items-center justify-center gap-2 bg-orange-500 text-white font-bold py-2.5 px-4 rounded-md hover:bg-orange-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-orange-500 disabled:bg-slate-600 disabled:cursor-not-allowed"
-                            >
-                                <GeminiIcon className="w-5 h-5" />
-                                {isGenerating ? 'Generando Análisis...' : 'Generar Explicación con Gemini'}
-                            </button>
                             <div className="mt-4">
                                 {explanation && (
-                                    <div className="prose prose-sm prose-invert bg-slate-900/50 p-4 rounded-md border border-slate-700 max-w-none" dangerouslySetInnerHTML={{ __html: explanation.replace(/\n/g, '<br />') }}></div>
+                                    <div className="prose prose-sm prose-invert bg-slate-900/50 p-4 rounded-md border border-slate-700 max-w-none" dangerouslySetInnerHTML={{ __html: explanation }}></div>
                                 )}
-                                {geminiError && <p className="text-red-400 text-sm mt-2">{geminiError}</p>}
                             </div>
                         </div>
                     )}
