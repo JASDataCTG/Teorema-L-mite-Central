@@ -1,9 +1,49 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { GoogleGenAI } from "@google/genai";
 import { calculateClassificationMetrics, generateNormalData, calculateAuc } from '../utils/dataUtils';
-import { InfoIcon } from './Icons';
+import { InfoIcon, GeminiIcon } from './Icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, ReferenceLine, Dot } from 'recharts';
 
 const TOTAL_INSTANCES = 1000;
+
+type Scenario = {
+  id: string;
+  name: string;
+  params: {
+    prevalence: number;
+    posMean: number;
+    posStdDev: number;
+    negMean: number;
+    negStdDev: number;
+  };
+  description: string;
+  promptContext: string;
+};
+
+const scenarios: Scenario[] = [
+  {
+    id: 'cancer',
+    name: 'Diagnóstico de Cáncer (Prueba Preliminar)',
+    params: { prevalence: 0.05, posMean: 0.80, posStdDev: 0.15, negMean: 0.20, negStdDev: 0.18, },
+    description: 'Un modelo de IA analiza imágenes médicas para una detección temprana de cáncer. Un "positivo" significa que el modelo cree que hay cáncer. Es crucial no pasar por alto casos reales (alta sensibilidad), incluso si eso significa tener algunos falsos positivos que luego serán descartados por un especialista.',
+    promptContext: 'En el contexto de un modelo de IA para la detección temprana de cáncer a partir de imágenes médicas.'
+  },
+  {
+    id: 'fraud',
+    name: 'Detección de Fraude con Tarjetas',
+    params: { prevalence: 0.01, posMean: 0.90, posStdDev: 0.12, negMean: 0.10, negStdDev: 0.10, },
+    description: 'Un sistema monitorea transacciones en tiempo real para identificar posibles fraudes. Un "positivo" es una transacción marcada como fraudulenta. Una alta precisión es vital para no molestar a los clientes bloqueando transacciones legítimas. Un falso positivo significa bloquear la tarjeta de un cliente inocente.',
+     promptContext: 'En el contexto de un sistema que detecta transacciones fraudulentas con tarjetas de crédito en tiempo real.'
+  },
+  {
+    id: 'spam',
+    name: 'Filtro de Correo no Deseado (Spam)',
+    params: { prevalence: 0.30, posMean: 0.85, posStdDev: 0.10, negMean: 0.15, negStdDev: 0.15,},
+    description: 'Un algoritmo clasifica los correos entrantes como "Spam" (positivo) o "No Spam" (negativo). Es muy importante no clasificar un correo importante como spam (evitar falsos positivos). Por lo tanto, se prioriza una alta precisión, a veces a costa de dejar pasar algo de spam a la bandeja de entrada (menor sensibilidad).',
+    promptContext: 'En el contexto de un filtro de correo no deseado (spam).'
+  },
+];
+
 
 // Custom Dot for the active point on ROC curve
 const ActiveDot = (props: any) => {
@@ -56,6 +96,11 @@ export const ConfusionMatrix: React.FC = () => {
     const [isAnimating, setIsAnimating] = useState(false);
     const animationRef = useRef<number | null>(null);
 
+    const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
+    const [explanation, setExplanation] = useState<string>('');
+    const [isGenerating, setIsGenerating] = useState<boolean>(false);
+    const [geminiError, setGeminiError] = useState<string>('');
+
     const scores = useMemo(() => {
         const numPositive = Math.round(TOTAL_INSTANCES * prevalence);
         const numNegative = TOTAL_INSTANCES - numPositive;
@@ -107,7 +152,6 @@ export const ConfusionMatrix: React.FC = () => {
             points.push({ fpr, tpr, threshold: t, distance });
         }
 
-        // Find the point on the curve closest to the current threshold's FPR
         const activePointFpr = fp / numActualNegative;
         let minDistance = Infinity;
         let activeIndex = -1;
@@ -120,7 +164,6 @@ export const ConfusionMatrix: React.FC = () => {
             }
         });
 
-        // Add an exact point for the current threshold for precision
         const currentTpr = numActualPositive > 0 ? tp / numActualPositive : 0;
         const currentFpr = numActualNegative > 0 ? fp / numActualNegative : 0;
         
@@ -167,6 +210,61 @@ export const ConfusionMatrix: React.FC = () => {
             if (animationRef.current) clearInterval(animationRef.current);
         };
     }, [isAnimating]);
+
+    const handleScenarioChange = (id: string) => {
+        const scenario = scenarios.find(s => s.id === id);
+        setSelectedScenarioId(id);
+        setExplanation('');
+        setGeminiError('');
+        if (scenario) {
+            const { prevalence, posMean, posStdDev, negMean, negStdDev } = scenario.params;
+            setPrevalence(prevalence);
+            setPosMean(posMean);
+            setPosStdDev(posStdDev);
+            setNegMean(negMean);
+            setNegStdDev(negStdDev);
+        }
+    };
+    
+    const handleGenerateExplanation = async () => {
+        const scenario = scenarios.find(s => s.id === selectedScenarioId);
+        if (!scenario) return;
+
+        setIsGenerating(true);
+        setExplanation('');
+        setGeminiError('');
+
+        const prompt = `
+            Actúa como un científico de datos experto explicando los resultados de un modelo de clasificación a un público no técnico.
+
+            **Contexto del Problema:** ${scenario.name}. ${scenario.promptContext}
+
+            **Métricas Actuales del Modelo:**
+            *   Exactitud: ${metrics.accuracy.toFixed(3)}
+            *   Precisión: ${metrics.precision.toFixed(3)}
+            *   Sensibilidad (Recall): ${metrics.recall.toFixed(3)}
+            *   Puntuación F1: ${metrics.f1Score.toFixed(3)}
+            *   AUC: ${auc.toFixed(4)}
+
+            **Tu Tarea:**
+            En español, proporciona una explicación concisa (2-3 párrafos) de lo que estas métricas significan en el contexto de '${scenario.name}'. Enfócate en las implicaciones prácticas y el equilibrio entre las métricas. Por ejemplo, si la sensibilidad es baja en un diagnóstico médico, ¿qué significa para los pacientes? Si la precisión es baja en la detección de fraude, ¿qué impacto tiene en los clientes? Usa un lenguaje claro, evita la jerga técnica y formatea la respuesta en Markdown.
+        `;
+
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+            });
+            setExplanation(response.text);
+        } catch (error) {
+            console.error("Error generating explanation:", error);
+            setGeminiError("No se pudo generar la explicación. Por favor, inténtalo de nuevo.");
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
 
     const MatrixCell: React.FC<{ label: string; value: number; bgColor: string; textColor: string; description: string }> = ({ label, value, bgColor, textColor, description }) => (
         <div className={`${bgColor} ${textColor} p-4 rounded-lg text-center flex flex-col justify-center shadow-md min-h-[120px]`}>
@@ -249,7 +347,6 @@ export const ConfusionMatrix: React.FC = () => {
                             <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }} labelFormatter={(value) => `FPR: ${value.toFixed(3)}`} />
                             <Line type="monotone" dataKey="tpr" stroke="#f97316" strokeWidth={2} dot={false} name="Sensibilidad" />
                             <Line dataKey="tpr" stroke="transparent" dot={<ActiveDot/>} isAnimationActive={false}/>
-                            {/* FIX: Replaced invalid type="dashed" with strokeDasharray="3 3" to make the line dashed. */}
                             <Line dataKey={ (payload) => payload.fpr } stroke="#94a3b8" strokeWidth={1} dot={false} name="Aleatorio" strokeDasharray="3 3"/>
                          </LineChart>
                      </ResponsiveContainer>
@@ -267,6 +364,44 @@ export const ConfusionMatrix: React.FC = () => {
                         <MetricDisplay label="Prevalencia" value={metrics.prevalence} tooltip="¿Con qué frecuencia ocurre la clase positiva? (VP+FN)/Total" />
                         <MetricDisplay label="Total" value={`${TOTAL_INSTANCES}`} tooltip="Número total de instancias simuladas." />
                     </div>
+                </div>
+                <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h2 className="text-xl font-semibold text-slate-100 mb-4">Análisis con IA</h2>
+                     <div>
+                        <label htmlFor="scenario-select" className="block text-sm font-medium text-slate-300 mb-2">
+                            Selecciona un Escenario de Aplicación:
+                        </label>
+                        <select
+                            id="scenario-select"
+                            value={selectedScenarioId}
+                            onChange={(e) => handleScenarioChange(e.target.value)}
+                            className="block w-full pl-3 pr-10 py-2 text-base bg-slate-700 border-slate-600 text-white focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm rounded-md"
+                        >
+                            <option value="" disabled>Elige un caso de uso...</option>
+                            {scenarios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                    </div>
+                    {selectedScenarioId && (
+                        <div className="mt-4">
+                            <p className="text-sm text-slate-400 bg-slate-900/50 p-3 rounded-md border border-slate-700">
+                                {scenarios.find(s => s.id === selectedScenarioId)?.description}
+                            </p>
+                            <button
+                                onClick={handleGenerateExplanation}
+                                disabled={isGenerating}
+                                className="w-full mt-4 flex items-center justify-center gap-2 bg-orange-500 text-white font-bold py-2.5 px-4 rounded-md hover:bg-orange-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-orange-500 disabled:bg-slate-600 disabled:cursor-not-allowed"
+                            >
+                                <GeminiIcon className="w-5 h-5" />
+                                {isGenerating ? 'Generando Análisis...' : 'Generar Explicación con Gemini'}
+                            </button>
+                            <div className="mt-4">
+                                {explanation && (
+                                    <div className="prose prose-sm prose-invert bg-slate-900/50 p-4 rounded-md border border-slate-700 max-w-none" dangerouslySetInnerHTML={{ __html: explanation.replace(/\n/g, '<br />') }}></div>
+                                )}
+                                {geminiError && <p className="text-red-400 text-sm mt-2">{geminiError}</p>}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

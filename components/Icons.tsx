@@ -24,3 +24,30 @@ export const ConfusionMatrixIcon: React.FC<React.SVGProps<SVGSVGElement>> = (pro
         <path d="M1 5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H3a2 2 0 01-2-2V5zm2 0v5h5V5H3zm7 0v5h5V5h-5zM3 12v3h5v-3H3zm7 0v3h5v-3h-5z"/>
     </svg>
 );
+
+export const GeminiIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+        <path d="M5.14286 9.42857C6.24383 9.42857 7.14286 8.52954 7.14286 7.42857C7.14286 6.32761 6.24383 5.42857 5.14286 5.42857C4.04189 5.42857 3.14286 6.32761 3.14286 7.42857C3.14286 8.52954 4.04189 9.42857 5.14286 9.42857Z" fill="url(#paint0_linear_1_2)"/>
+        <path d="M9.42857 21.1429C10.5295 21.1429 11.4286 20.2438 11.4286 19.1429C11.4286 18.0419 10.5295 17.1429 9.42857 17.1429C8.32761 17.1429 7.42857 18.0419 7.42857 19.1429C7.42857 20.2438 8.32761 21.1429 9.42857 21.1429Z" fill="url(#paint1_linear_1_2)"/>
+        <path d="M9.42857 12.8571C10.5295 12.8571 11.4286 11.9581 11.4286 10.8571C11.4286 9.75617 10.5295 8.85714 9.42857 8.85714C8.32761 8.85714 7.42857 9.75617 7.42857 10.8571C7.42857 11.9581 8.32761 12.8571 9.42857 12.8571Z" fill="url(#paint2_linear_1_2)"/>
+        <path d="M18.5714 14.5714C19.6724 14.5714 20.5714 13.6724 20.5714 12.5714C20.5714 11.4705 19.6724 10.5714 18.5714 10.5714C17.4705 10.5714 16.5714 11.4705 16.5714 12.5714C16.5714 13.6724 17.4705 14.5714 18.5714 14.5714Z" fill="url(#paint3_linear_1_2)"/>
+        <defs>
+        <linearGradient id="paint0_linear_1_2" x1="5.14286" y1="5.42857" x2="5.14286" y2="9.42857" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#9945FF"/>
+        <stop offset="1" stop-color="#2795FF"/>
+        </linearGradient>
+        <linearGradient id="paint1_linear_1_2" x1="9.42857" y1="17.1429" x2="9.42857" y2="21.1429" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#266EF6"/>
+        <stop offset="1" stop-color="#45B5AA"/>
+        </linearGradient>
+        <linearGradient id="paint2_linear_1_2" x1="9.42857" y1="8.85714" x2="9.42857" y2="12.8571" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#9945FF"/>
+        <stop offset="1" stop-color="#2795FF"/>
+        </linearGradient>
+        <linearGradient id="paint3_linear_1_2" x1="18.5714" y1="10.5714" x2="18.5714" y2="14.5714" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#FF8345"/>
+        <stop offset="1" stop-color="#FFD627"/>
+        </linearGradient>
+        </defs>
+    </svg>
+);
