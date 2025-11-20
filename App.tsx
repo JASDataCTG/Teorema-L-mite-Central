@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { Simulator } from './components/Simulator';
 import { Calculator } from './components/Calculator';
 import { ConfusionMatrix } from './components/ConfusionMatrix';
-import { ChartBarIcon, CalculatorIcon, ConfusionMatrixIcon } from './components/Icons';
+import { GradientDescentSimulator } from './components/GradientDescentSimulator';
+import { LogisticRegressionSimulator } from './components/LogisticRegressionSimulator';
+import { ChartBarIcon, CalculatorIcon, ConfusionMatrixIcon, GradientIcon, LogisticIcon } from './components/Icons';
 
-type Tab = 'simulator' | 'calculator' | 'confusionMatrix';
+type Tab = 'simulator' | 'calculator' | 'confusionMatrix' | 'gradientDescent' | 'logisticRegression';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('simulator');
@@ -17,6 +19,10 @@ const App: React.FC = () => {
         return <Calculator />;
       case 'confusionMatrix':
         return <ConfusionMatrix />;
+      case 'gradientDescent':
+        return <GradientDescentSimulator />;
+      case 'logisticRegression':
+        return <LogisticRegressionSimulator />;
       default:
         return <Simulator />;
     }
@@ -27,6 +33,8 @@ const App: React.FC = () => {
     { id: 'simulator', name: 'Simulador TLC', icon: <ChartBarIcon className="w-5 h-5 mr-2" /> },
     { id: 'calculator', name: 'Calculadora de Muestra', icon: <CalculatorIcon className="w-5 h-5 mr-2" /> },
     { id: 'confusionMatrix', name: 'Simulador Matriz de Confusión', icon: <ConfusionMatrixIcon className="w-5 h-5 mr-2" /> },
+    { id: 'gradientDescent', name: 'Descenso de Gradiente 3D', icon: <GradientIcon className="w-5 h-5 mr-2" /> },
+    { id: 'logisticRegression', name: 'Regresión Logística', icon: <LogisticIcon className="w-5 h-5 mr-2" /> },
   ];
 
   return (
