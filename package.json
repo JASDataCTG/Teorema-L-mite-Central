@@ -17,6 +17,10 @@
     "recharts": "^2.12.3",
     "three": "^0.160.0"
   },
+  "overrides": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
   "devDependencies": {
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
