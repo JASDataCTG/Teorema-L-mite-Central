@@ -4,6 +4,26 @@ import { OrbitControls, PerspectiveCamera, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { InfoIcon } from './Icons';
 
+// Fix for missing R3F types in strict environments or when global JSX types are missing
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      group: any;
+      mesh: any;
+      bufferGeometry: any;
+      bufferAttribute: any;
+      meshStandardMaterial: any;
+      meshBasicMaterial: any;
+      sphereGeometry: any;
+      lineBasicMaterial: any;
+      ambientLight: any;
+      pointLight: any;
+      gridHelper: any;
+      axesHelper: any;
+    }
+  }
+}
+
 // --- Math Logic ---
 const calculateHeight = (x: number, z: number) => 0.1 * (x * x + z * z);
 const calculateGradient = (x: number, z: number) => ({ dx: 0.2 * x, dz: 0.2 * z });
